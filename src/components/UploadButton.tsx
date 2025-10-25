@@ -69,8 +69,11 @@ export const UploadButton = () => {
       setCaption("");
       setPreview(null);
     } catch (error) {
-      console.error("Upload error:", error);
-      toast.error("Failed to upload post");
+      // Only log in development
+      if (import.meta.env.DEV) {
+        console.error("Upload error:", error);
+      }
+      toast.error("Failed to upload post. Please try again.");
     } finally {
       setUploading(false);
     }
