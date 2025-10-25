@@ -70,10 +70,12 @@ const Auth = () => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>{isLogin ? "Welcome Back" : "Create Account"}</CardTitle>
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            zaBaddies_Online
+          </CardTitle>
           <CardDescription>
-            {isLogin ? "Sign in to your account" : "Sign up to start sharing"}
+            {isLogin ? "Welcome back! Sign in to continue" : "Join the community and start sharing"}
           </CardDescription>
         </CardHeader>
         <CardContent>
