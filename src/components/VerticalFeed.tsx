@@ -102,23 +102,25 @@ export const VerticalFeed = () => {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="h-screen w-full snap-y snap-mandatory overflow-y-scroll scrollbar-hide"
-      onScroll={handleScroll}
-    >
-      {posts.map((post, index) => (
-        <FeedPost
-          key={post.id}
-          id={post.id}
-          mediaUrl={post.media_url}
-          mediaType={post.media_type}
-          caption={post.caption}
-          likesCount={post.likes_count}
-          isActive={index === currentIndex}
-          onLike={() => handleLike(post.id, post.likes_count)}
-        />
-      ))}
+    <div className="flex justify-center bg-background">
+      <div
+        ref={containerRef}
+        className="h-screen w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide"
+        onScroll={handleScroll}
+      >
+        {posts.map((post, index) => (
+          <FeedPost
+            key={post.id}
+            id={post.id}
+            mediaUrl={post.media_url}
+            mediaType={post.media_type}
+            caption={post.caption}
+            likesCount={post.likes_count}
+            isActive={index === currentIndex}
+            onLike={() => handleLike(post.id, post.likes_count)}
+          />
+        ))}
+      </div>
     </div>
   );
 };

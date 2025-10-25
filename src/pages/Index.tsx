@@ -43,18 +43,22 @@ const Index = () => {
   }
 
   return (
-    <div className="relative">
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={handleLogout}
-        className="fixed top-4 right-4 z-50"
-      >
-        <LogOut className="h-5 w-5" />
-      </Button>
-      
-      <VerticalFeed />
-      <UploadButton />
+    <div className="relative bg-background">
+      <div className="flex justify-center">
+        <div className="relative w-full max-w-md">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={handleLogout}
+            className="fixed top-4 right-4 z-50"
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
+          
+          <VerticalFeed />
+          <UploadButton />
+        </div>
+      </div>
     </div>
   );
 };
