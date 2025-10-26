@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,7 @@ interface FeedPostProps {
   mediaType: "image" | "video";
   caption?: string;
   likesCount: number;
+  isLiked: boolean;
   isActive: boolean;
   onLike: () => void;
 }
@@ -17,11 +18,11 @@ export const FeedPost = ({
   mediaType,
   caption,
   likesCount,
+  isLiked,
   isActive,
   onLike,
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isLiked, setIsLiked] = useState(false);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -34,7 +35,6 @@ export const FeedPost = ({
   }, [isActive]);
 
   const handleLike = () => {
-    setIsLiked(!isLiked);
     onLike();
   };
 

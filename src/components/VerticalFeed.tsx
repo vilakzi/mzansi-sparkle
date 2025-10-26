@@ -9,6 +9,7 @@ interface Post {
   media_type: "image" | "video";
   caption?: string;
   likes_count: number;
+  user_liked?: boolean;
 }
 
 export const VerticalFeed = () => {
@@ -23,17 +24,43 @@ export const VerticalFeed = () => {
   }, []);
 
   const fetchPosts = async () => {
-    const { data, error } = await supabase
+    const { data: postsData, error } = await supabase
       .from("posts")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
       toast.error("Failed to load posts");
-      console.error(error);
-    } else {
-      setPosts((data || []) as Post[]);
+      if (import.meta.env.DEV) {
+        console.error(error);
+      }
+      setLoading(false);
+      return;
     }
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user && postsData) {
+      // Fetch user's likes
+      const { data: userLikes } = await supabase
+        .from("post_likes")
+        .select("post_id")
+        .eq("user_id", user.id);
+      
+      const likedPostIds = new Set(userLikes?.map(like => like.post_id) || []);
+      
+      // Add user_liked flag to each post
+      const postsWithLikes = postsData.map(post => ({
+        ...post,
+        user_liked: likedPostIds.has(post.id)
+      })) as Post[];
+      
+      setPosts(postsWithLikes);
+    } else {
+      setPosts((postsData || []) as Post[]);
+    }
+    
     setLoading(false);
   };
 
@@ -66,19 +93,32 @@ export const VerticalFeed = () => {
     setCurrentIndex(index);
   };
 
-  const handleLike = async (postId: string, currentLikes: number) => {
-    const { error } = await supabase
-      .from("posts")
-      .update({ likes_count: currentLikes + 1 })
-      .eq("id", postId);
+  const handleLike = async (postId: string) => {
+    // Check if user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Please sign in to like posts");
+      return;
+    }
+
+    // Call the secure database function to toggle like
+    const { data, error } = await supabase.rpc("toggle_post_like", {
+      p_post_id: postId,
+    });
 
     if (error) {
-      toast.error("Failed to like post");
-    } else {
+      toast.error("Failed to update like");
+      if (import.meta.env.DEV) {
+        console.error(error);
+      }
+    } else if (data && data.length > 0) {
+      const { liked, new_count } = data[0];
+      
+      // Update the post in state
       setPosts((current) =>
         current.map((post) =>
           post.id === postId
-            ? { ...post, likes_count: post.likes_count + 1 }
+            ? { ...post, likes_count: new_count, user_liked: liked }
             : post
         )
       );
@@ -116,8 +156,9 @@ export const VerticalFeed = () => {
             mediaType={post.media_type}
             caption={post.caption}
             likesCount={post.likes_count}
+            isLiked={post.user_liked || false}
             isActive={index === currentIndex}
-            onLike={() => handleLike(post.id, post.likes_count)}
+            onLike={() => handleLike(post.id)}
           />
         ))}
       </div>
