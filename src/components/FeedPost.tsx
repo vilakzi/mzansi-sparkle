@@ -132,14 +132,48 @@ export const FeedPost = ({
 
   const handleSeekBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    const percentage = clickX / rect.width;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
     seekToPercentage(percentage);
+  };
+
+  const handleSeekBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsScrubbing(true);
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const moveX = moveEvent.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+      
+      const newProgress = percentage * 100;
+      setProgress(newProgress);
+      
+      if (videoRef.current) {
+        const newTime = percentage * videoRef.current.duration;
+        setCurrentTime(newTime);
+      }
+    };
+    
+    const handleMouseUp = () => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = (progress / 100) * videoRef.current.duration;
+      }
+      setIsScrubbing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   const handleSeekBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    e.preventDefault();
     setIsScrubbing(true);
     const rect = e.currentTarget.getBoundingClientRect();
     const touchX = e.touches[0].clientX - rect.left;
@@ -154,7 +188,9 @@ export const FeedPost = ({
     }
   };
 
-  const handleSeekBarTouchEnd = () => {
+  const handleSeekBarTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
     if (videoRef.current) {
       videoRef.current.currentTime = (progress / 100) * videoRef.current.duration;
     }
@@ -233,6 +269,7 @@ export const FeedPost = ({
             <div 
               className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
               onClick={handleSeekBarClick}
+              onMouseDown={handleSeekBarMouseDown}
               onTouchStart={handleSeekBarTouch}
               onTouchMove={handleSeekBarTouch}
               onTouchEnd={handleSeekBarTouchEnd}
