@@ -115,7 +115,7 @@ export const FeedPost = ({
         />
       )}
       
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-24">
         {profile && (
           <div 
             className="flex items-center gap-3 mb-4 cursor-pointer"
