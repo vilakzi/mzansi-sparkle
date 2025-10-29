@@ -7,6 +7,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
+import Search from "./pages/Search";
+import Trending from "./pages/Trending";
+import Hashtag from "./pages/Hashtag";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,6 +24,9 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/profile/:username" element={<Profile />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/trending" element={<Trending />} />
+          <Route path="/hashtag/:name" element={<Hashtag />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

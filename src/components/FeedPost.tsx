@@ -52,6 +52,36 @@ export const FeedPost = ({
     onLike();
   };
 
+  const renderCaption = () => {
+    if (!caption) return null;
+
+    // Split caption by hashtags and render them as clickable
+    const parts = caption.split(/(#[a-zA-Z0-9_]+)/g);
+    
+    return (
+      <p className="mb-4 text-white text-lg font-medium">
+        {parts.map((part, index) => {
+          if (part.startsWith("#")) {
+            const hashtagName = part.substring(1);
+            return (
+              <span
+                key={index}
+                className="text-primary cursor-pointer hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/hashtag/${hashtagName}`);
+                }}
+              >
+                {part}
+              </span>
+            );
+          }
+          return <span key={index}>{part}</span>;
+        })}
+      </p>
+    );
+  };
+
   return (
     <div className="relative h-screen w-full snap-start snap-always">
       {mediaType === "video" ? (
@@ -87,9 +117,8 @@ export const FeedPost = ({
           </div>
         )}
         
-        {caption && (
-          <p className="mb-4 text-white text-lg font-medium">{caption}</p>
-        )}
+        
+        {renderCaption()}
         
         <div className="flex items-center gap-6">
           <button

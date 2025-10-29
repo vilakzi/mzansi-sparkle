@@ -5,7 +5,7 @@ import { VerticalFeed } from "@/components/VerticalFeed";
 import { UploadButton } from "@/components/UploadButton";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon, Search, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 type Profile = {
@@ -73,25 +73,44 @@ const Index = () => {
     <div className="relative bg-background">
       <div className="flex justify-center">
         <div className="relative w-full max-w-md">
-          <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-            {profile && (
-              <Avatar 
-                className="h-8 w-8 cursor-pointer" 
-                onClick={() => navigate(`/profile/${profile.username}`)}
+          <div className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => navigate("/search")}
               >
-                <AvatarImage src={profile.avatar_url || undefined} />
-                <AvatarFallback>
-                  <UserIcon className="h-4 w-4" />
-                </AvatarFallback>
-              </Avatar>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
+                <Search className="h-5 w-5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => navigate("/trending")}
+              >
+                <TrendingUp className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {profile && (
+                <Avatar 
+                  className="h-8 w-8 cursor-pointer" 
+                  onClick={() => navigate(`/profile/${profile.username}`)}
+                >
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback>
+                    <UserIcon className="h-4 w-4" />
+                  </AvatarFallback>
+                </Avatar>
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
           
           <VerticalFeed />
