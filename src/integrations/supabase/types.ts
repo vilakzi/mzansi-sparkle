@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string | null
+          id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string | null
+          id?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           content: string
@@ -429,6 +450,42 @@ export type Database = {
           },
         ]
       }
+      privacy_settings: {
+        Row: {
+          age_restricted_content: boolean | null
+          created_at: string | null
+          id: string
+          is_private: boolean | null
+          show_followers: boolean | null
+          show_following: boolean | null
+          updated_at: string | null
+          user_id: string
+          who_can_comment: string | null
+        }
+        Insert: {
+          age_restricted_content?: boolean | null
+          created_at?: string | null
+          id?: string
+          is_private?: boolean | null
+          show_followers?: boolean | null
+          show_following?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          who_can_comment?: string | null
+        }
+        Update: {
+          age_restricted_content?: boolean | null
+          created_at?: string | null
+          id?: string
+          is_private?: boolean | null
+          show_followers?: boolean | null
+          show_following?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          who_can_comment?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -464,6 +521,70 @@ export type Database = {
           username?: string
         }
         Relationships: []
+      }
+      reports: {
+        Row: {
+          comment_id: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          post_id: string | null
+          reason: string
+          reported_user_id: string | null
+          reporter_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+        }
+        Insert: {
+          comment_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          post_id?: string | null
+          reason: string
+          reported_user_id?: string | null
+          reporter_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+        }
+        Update: {
+          comment_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          post_id?: string | null
+          reason?: string
+          reported_user_id?: string | null
+          reporter_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       saved_posts: {
         Row: {
@@ -507,6 +628,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -558,6 +700,17 @@ export type Database = {
           views_count: number
         }[]
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_blocked: {
+        Args: { target_id: string; viewer_id: string }
+        Returns: boolean
+      }
       toggle_follow: {
         Args: { p_following_id: string }
         Returns: {
@@ -575,7 +728,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -702,6 +855,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
