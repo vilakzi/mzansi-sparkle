@@ -58,13 +58,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "comments_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "trending_posts"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "comments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -184,13 +177,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "notifications_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "trending_posts"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -233,13 +219,6 @@ export type Database = {
             referencedRelation: "posts"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "post_hashtags_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "trending_posts"
-            referencedColumns: ["id"]
-          },
         ]
       }
       post_likes: {
@@ -267,13 +246,6 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "post_likes_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "trending_posts"
             referencedColumns: ["id"]
           },
         ]
@@ -306,13 +278,6 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "post_views_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "trending_posts"
             referencedColumns: ["id"]
           },
           {
@@ -406,58 +371,27 @@ export type Database = {
       }
     }
     Views: {
-      trending_posts: {
-        Row: {
-          caption: string | null
-          comments_count: number | null
-          created_at: string | null
-          engagement_score: number | null
-          id: string | null
-          likes_count: number | null
-          media_type: string | null
-          media_url: string | null
-          user_id: string | null
-          views_count: number | null
-        }
-        Insert: {
-          caption?: string | null
-          comments_count?: number | null
-          created_at?: string | null
-          engagement_score?: never
-          id?: string | null
-          likes_count?: number | null
-          media_type?: string | null
-          media_url?: string | null
-          user_id?: string | null
-          views_count?: number | null
-        }
-        Update: {
-          caption?: string | null
-          comments_count?: number | null
-          created_at?: string | null
-          engagement_score?: never
-          id?: string | null
-          likes_count?: number | null
-          media_type?: string | null
-          media_url?: string | null
-          user_id?: string | null
-          views_count?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "posts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       extract_hashtags: {
         Args: { p_caption: string; p_post_id: string }
         Returns: undefined
+      }
+      get_trending_posts: {
+        Args: { limit_count?: number }
+        Returns: {
+          caption: string
+          comments_count: number
+          created_at: string
+          engagement_score: number
+          id: string
+          likes_count: number
+          media_type: string
+          media_url: string
+          user_id: string
+          views_count: number
+        }[]
       }
       toggle_follow: {
         Args: { p_following_id: string }
