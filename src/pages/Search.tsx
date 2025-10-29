@@ -7,6 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { UploadButton } from "@/components/UploadButton";
 import { Search as SearchIcon, TrendingUp, Hash, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
@@ -243,6 +244,7 @@ const Search = () => {
         )}
       </div>
       
+      {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
       <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );

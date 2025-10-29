@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { UploadButton } from "@/components/UploadButton";
 import { ArrowLeft, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 
@@ -146,6 +147,7 @@ const Saved = () => {
         </div>
       </div>
       
+      {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
       <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );

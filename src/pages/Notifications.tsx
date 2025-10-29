@@ -5,6 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { UploadButton } from "@/components/UploadButton";
 import { Heart, MessageCircle, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -201,6 +202,7 @@ const Notifications = () => {
         </div>
       </div>
       
+      {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
       <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );

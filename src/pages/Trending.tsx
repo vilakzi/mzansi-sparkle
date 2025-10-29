@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { UploadButton } from "@/components/UploadButton";
 import { ArrowLeft, Hash, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
@@ -193,6 +194,7 @@ const Trending = () => {
         </Tabs>
       </div>
       
+      {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
       <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );
