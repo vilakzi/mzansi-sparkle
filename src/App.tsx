@@ -11,6 +11,8 @@ import Search from "./pages/Search";
 import Trending from "./pages/Trending";
 import Hashtag from "./pages/Hashtag";
 import Saved from "./pages/Saved";
+import Notifications from "./pages/Notifications";
+import PostDetail from "./pages/PostDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +31,8 @@ const App = () => (
           <Route path="/trending" element={<Trending />} />
           <Route path="/hashtag/:name" element={<Hashtag />} />
           <Route path="/saved" element={<Saved />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/post/:id" element={<PostDetail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

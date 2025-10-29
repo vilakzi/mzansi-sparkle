@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/BottomNav";
 import { ArrowLeft, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,10 +24,30 @@ const Saved = () => {
   const navigate = useNavigate();
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUpload, setShowUpload] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
 
   useEffect(() => {
     fetchSavedPosts();
+    fetchUserProfile();
   }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      if (data) setUserProfile(data);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  };
 
   const fetchSavedPosts = async () => {
     try {
@@ -124,6 +145,8 @@ const Saved = () => {
           )}
         </div>
       </div>
+      
+      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );
 };

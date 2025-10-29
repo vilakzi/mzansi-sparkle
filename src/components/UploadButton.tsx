@@ -1,13 +1,17 @@
-import { useState } from "react";
-import { Plus, Upload, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Upload, X } from "lucide-react";
 import { Button } from "./ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Textarea } from "./ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-export const UploadButton = () => {
-  const [open, setOpen] = useState(false);
+type UploadButtonProps = {
+  onClose?: () => void;
+};
+
+export const UploadButton = ({ onClose }: UploadButtonProps) => {
+  const [open, setOpen] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -19,6 +23,13 @@ export const UploadButton = () => {
       setFile(selectedFile);
       const previewUrl = URL.createObjectURL(selectedFile);
       setPreview(previewUrl);
+    }
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    if (onClose) {
+      onClose();
     }
   };
 
@@ -64,12 +75,11 @@ export const UploadButton = () => {
       if (insertError) throw insertError;
 
       toast.success("Posted successfully!");
-      setOpen(false);
       setFile(null);
       setCaption("");
       setPreview(null);
+      handleClose();
     } catch (error) {
-      // Only log in development
       if (import.meta.env.DEV) {
         console.error("Upload error:", error);
       }
@@ -80,15 +90,7 @@ export const UploadButton = () => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          size="icon"
-          className="fixed bottom-20 right-6 h-14 w-14 rounded-full shadow-lg z-50"
-        >
-          <Plus className="h-6 w-6" />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create Post</DialogTitle>

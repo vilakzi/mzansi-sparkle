@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/BottomNav";
 import { Search as SearchIcon, TrendingUp, Hash, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,6 +40,29 @@ const Search = () => {
   const [users, setUsers] = useState<Profile[]>([]);
   const [hashtags, setHashtags] = useState<Hashtag[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [showUpload, setShowUpload] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      if (data) setUserProfile(data);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  };
 
   const handleSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) {
@@ -218,6 +242,8 @@ const Search = () => {
           </div>
         )}
       </div>
+      
+      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );
 };

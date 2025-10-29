@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/BottomNav";
 import { ArrowLeft, Hash, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,10 +30,30 @@ const Trending = () => {
   const [trendingPosts, setTrendingPosts] = useState<TrendingPost[]>([]);
   const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUpload, setShowUpload] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
 
   useEffect(() => {
     fetchTrending();
+    fetchUserProfile();
   }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      if (data) setUserProfile(data);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  };
 
   const fetchTrending = async () => {
     try {
@@ -171,6 +192,8 @@ const Trending = () => {
           </TabsContent>
         </Tabs>
       </div>
+      
+      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );
 };
