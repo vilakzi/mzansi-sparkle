@@ -256,7 +256,7 @@ export const FeedPost = ({
     const parts = caption.split(/(#[a-zA-Z0-9_]+)/g);
     
     return (
-      <p className="mb-4 text-white text-lg font-medium">
+      <p className="mb-4 text-white text-lg font-medium pointer-events-auto">
         {parts.map((part, index) => {
           if (part.startsWith("#")) {
             const hashtagName = part.substring(1);
@@ -282,18 +282,21 @@ export const FeedPost = ({
   return (
     <div className="relative h-screen w-full snap-start snap-always">
       {mediaType === "video" ? (
-        <div className="relative h-full w-full" onClick={handleVideoClick}>
+        <div className="relative h-full w-full">
+          <div className="absolute inset-0 pointer-events-none" onClick={handleVideoClick}>
+            <div className="w-full h-full pointer-events-auto" />
+          </div>
           <video
             ref={videoRef}
             src={mediaUrl}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover pointer-events-none"
             loop
             playsInline
             muted={isMuted}
           />
           
           {/* Interactive seekbar */}
-          <div className="absolute bottom-20 left-0 right-0 px-4">
+          <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
             <div className="flex items-center gap-2 text-white text-xs mb-1">
               <span>{formatTime(currentTime)}</span>
               <span>/</span>
@@ -339,7 +342,7 @@ export const FeedPost = ({
           {/* Volume control */}
           <button
             onClick={toggleMute}
-            className="absolute top-6 right-6 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10"
+            className="absolute top-6 right-6 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
           >
             {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
           </button>
@@ -352,9 +355,9 @@ export const FeedPost = ({
         />
       )}
       
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none">
         {profile && (
-          <div className="mb-4">
+          <div className="mb-4 pointer-events-auto">
             <Avatar 
               className="h-12 w-12 border-2 border-white cursor-pointer transition-transform active:scale-90"
               onClick={() => navigate(`/profile/${profile.username}`)}
@@ -370,7 +373,7 @@ export const FeedPost = ({
         
         {renderCaption()}
         
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 pointer-events-auto">
           <div className="flex items-center gap-6">
             <button
               onClick={handleLike}
