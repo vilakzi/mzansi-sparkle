@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
-import { Heart } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Heart, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
+import { CommentSheet } from "./CommentSheet";
 
 interface FeedPostProps {
   id: string;
@@ -10,6 +11,7 @@ interface FeedPostProps {
   mediaType: "image" | "video";
   caption?: string;
   likesCount: number;
+  commentsCount: number;
   isLiked: boolean;
   isActive: boolean;
   onLike: () => void;
@@ -21,10 +23,12 @@ interface FeedPostProps {
 }
 
 export const FeedPost = ({
+  id,
   mediaUrl,
   mediaType,
   caption,
   likesCount,
+  commentsCount,
   isLiked,
   isActive,
   onLike,
@@ -32,6 +36,7 @@ export const FeedPost = ({
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const navigate = useNavigate();
+  const [showComments, setShowComments] = useState(false);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -86,7 +91,7 @@ export const FeedPost = ({
           <p className="mb-4 text-white text-lg font-medium">{caption}</p>
         )}
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-6">
           <button
             onClick={handleLike}
             className="flex items-center gap-2 text-white transition-transform active:scale-90"
@@ -99,8 +104,22 @@ export const FeedPost = ({
             />
             <span className="text-lg font-semibold">{likesCount}</span>
           </button>
+          
+          <button
+            onClick={() => setShowComments(true)}
+            className="flex items-center gap-2 text-white transition-transform active:scale-90"
+          >
+            <MessageCircle className="h-8 w-8" />
+            <span className="text-lg font-semibold">{commentsCount}</span>
+          </button>
         </div>
       </div>
+      
+      <CommentSheet 
+        postId={id} 
+        isOpen={showComments} 
+        onClose={() => setShowComments(false)} 
+      />
     </div>
   );
 };

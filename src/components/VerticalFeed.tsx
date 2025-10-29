@@ -9,6 +9,7 @@ interface Post {
   media_type: "image" | "video";
   caption?: string;
   likes_count: number;
+  comments_count: number;
   user_liked?: boolean;
   profile?: {
     display_name: string;
@@ -172,6 +173,7 @@ export const VerticalFeed = () => {
             mediaType={post.media_type}
             caption={post.caption}
             likesCount={post.likes_count}
+            commentsCount={post.comments_count}
             isLiked={post.user_liked || false}
             isActive={index === currentIndex}
             onLike={() => handleLike(post.id)}
