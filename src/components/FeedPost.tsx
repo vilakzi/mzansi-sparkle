@@ -56,6 +56,7 @@ export const FeedPost = ({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const wasPlayingRef = useRef(false);
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
@@ -130,39 +131,46 @@ export const FeedPost = ({
     }
   };
 
-  const handleSeekBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
-    seekToPercentage(percentage);
-  };
-
   const handleSeekBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
+    
+    if (videoRef.current) {
+      wasPlayingRef.current = !videoRef.current.paused;
+      videoRef.current.pause();
+    }
+    
     setIsScrubbing(true);
     
+    const rect = e.currentTarget.getBoundingClientRect();
+    const initialX = e.clientX - rect.left;
+    const initialPercentage = Math.max(0, Math.min(1, initialX / rect.width));
+    
+    if (videoRef.current) {
+      const newTime = initialPercentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(initialPercentage * 100);
+      setCurrentTime(newTime);
+    }
+    
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const rect = e.currentTarget.getBoundingClientRect();
       const moveX = moveEvent.clientX - rect.left;
       const percentage = Math.max(0, Math.min(1, moveX / rect.width));
       
-      const newProgress = percentage * 100;
-      setProgress(newProgress);
-      
       if (videoRef.current) {
         const newTime = percentage * videoRef.current.duration;
+        videoRef.current.currentTime = newTime;
+        setProgress(percentage * 100);
         setCurrentTime(newTime);
       }
     };
     
     const handleMouseUp = () => {
-      if (videoRef.current) {
-        videoRef.current.currentTime = (progress / 100) * videoRef.current.duration;
-      }
       setIsScrubbing(false);
+      if (videoRef.current && wasPlayingRef.current) {
+        videoRef.current.play();
+        setIsPlaying(true);
+      }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -174,16 +182,40 @@ export const FeedPost = ({
   const handleSeekBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
+    
+    if (videoRef.current) {
+      wasPlayingRef.current = !videoRef.current.paused;
+      videoRef.current.pause();
+    }
+    
     setIsScrubbing(true);
+    
     const rect = e.currentTarget.getBoundingClientRect();
     const touchX = e.touches[0].clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, touchX / rect.width));
     
-    const newProgress = percentage * 100;
-    setProgress(newProgress);
+    if (videoRef.current) {
+      const newTime = percentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(percentage * 100);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const handleSeekBarTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (!isScrubbing) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touchX = e.touches[0].clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, touchX / rect.width));
     
     if (videoRef.current) {
       const newTime = percentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(percentage * 100);
       setCurrentTime(newTime);
     }
   };
@@ -191,10 +223,11 @@ export const FeedPost = ({
   const handleSeekBarTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (videoRef.current) {
-      videoRef.current.currentTime = (progress / 100) * videoRef.current.duration;
-    }
     setIsScrubbing(false);
+    if (videoRef.current && wasPlayingRef.current) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
   };
 
   const seekToPercentage = (percentage: number) => {
@@ -268,10 +301,9 @@ export const FeedPost = ({
             </div>
             <div 
               className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
-              onClick={handleSeekBarClick}
               onMouseDown={handleSeekBarMouseDown}
               onTouchStart={handleSeekBarTouch}
-              onTouchMove={handleSeekBarTouch}
+              onTouchMove={handleSeekBarTouchMove}
               onTouchEnd={handleSeekBarTouchEnd}
             >
               <div 
