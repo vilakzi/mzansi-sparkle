@@ -10,7 +10,9 @@ interface Post {
   caption?: string;
   likes_count: number;
   comments_count: number;
+  shares_count: number;
   user_liked?: boolean;
+  user_saved?: boolean;
   profile?: {
     display_name: string;
     username: string;
@@ -55,18 +57,26 @@ export const VerticalFeed = () => {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (user && postsData) {
-      // Fetch user's likes
-      const { data: userLikes } = await supabase
-        .from("post_likes")
-        .select("post_id")
-        .eq("user_id", user.id);
+      // Fetch user's likes and saved posts
+      const [{ data: userLikes }, { data: userSaved }] = await Promise.all([
+        supabase
+          .from("post_likes")
+          .select("post_id")
+          .eq("user_id", user.id),
+        supabase
+          .from("saved_posts")
+          .select("post_id")
+          .eq("user_id", user.id)
+      ]);
       
       const likedPostIds = new Set(userLikes?.map(like => like.post_id) || []);
+      const savedPostIds = new Set(userSaved?.map(save => save.post_id) || []);
       
-      // Add user_liked flag to each post
+      // Add user_liked and user_saved flags to each post
       const postsWithLikes = postsData.map((post: any) => ({
         ...post,
         user_liked: likedPostIds.has(post.id),
+        user_saved: savedPostIds.has(post.id),
         profile: post.profiles
       })) as Post[];
       
@@ -74,6 +84,8 @@ export const VerticalFeed = () => {
     } else {
       setPosts((postsData || []).map((post: any) => ({
         ...post,
+        user_liked: false,
+        user_saved: false,
         profile: post.profiles
       })) as Post[]);
     }
@@ -136,14 +148,12 @@ export const VerticalFeed = () => {
   };
 
   const handleLike = async (postId: string) => {
-    // Check if user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Please sign in to like posts");
       return;
     }
 
-    // Call the secure database function to toggle like
     const { data, error } = await supabase.rpc("toggle_post_like", {
       p_post_id: postId,
     });
@@ -156,7 +166,6 @@ export const VerticalFeed = () => {
     } else if (data && data.length > 0) {
       const { liked, new_count } = data[0];
       
-      // Update the post in state
       setPosts((current) =>
         current.map((post) =>
           post.id === postId
@@ -164,6 +173,50 @@ export const VerticalFeed = () => {
             : post
         )
       );
+    }
+  };
+
+  const handleSaveToggle = async (postId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Please sign in to save posts");
+      return;
+    }
+
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    try {
+      if (post.user_saved) {
+        // Unsave
+        const { error } = await supabase
+          .from("saved_posts")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+        toast.success("Post removed from saved");
+      } else {
+        // Save
+        const { error } = await supabase
+          .from("saved_posts")
+          .insert({ post_id: postId, user_id: user.id });
+
+        if (error) throw error;
+        toast.success("Post saved");
+      }
+
+      setPosts((current) =>
+        current.map((p) =>
+          p.id === postId ? { ...p, user_saved: !p.user_saved } : p
+        )
+      );
+    } catch (error: any) {
+      toast.error("Failed to save post");
+      if (import.meta.env.DEV) {
+        console.error(error);
+      }
     }
   };
 
@@ -199,9 +252,12 @@ export const VerticalFeed = () => {
             caption={post.caption}
             likesCount={post.likes_count}
             commentsCount={post.comments_count}
+            sharesCount={post.shares_count}
+            isSaved={post.user_saved || false}
             isLiked={post.user_liked || false}
             isActive={index === currentIndex}
             onLike={() => handleLike(post.id)}
+            onSaveToggle={() => handleSaveToggle(post.id)}
             profile={post.profile}
           />
         ))}

@@ -54,6 +54,13 @@ export type Database = {
             foreignKeyName: "comments_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
             referencedRelation: "posts"
             referencedColumns: ["id"]
           },
@@ -173,6 +180,13 @@ export type Database = {
             foreignKeyName: "notifications_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
             referencedRelation: "posts"
             referencedColumns: ["id"]
           },
@@ -216,6 +230,13 @@ export type Database = {
             foreignKeyName: "post_hashtags_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_hashtags_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
             referencedRelation: "posts"
             referencedColumns: ["id"]
           },
@@ -245,34 +266,103 @@ export type Database = {
             foreignKeyName: "post_likes_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_shares: {
+        Row: {
+          created_at: string | null
+          id: string
+          platform: string | null
+          post_id: string
+          share_type: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+          post_id: string
+          share_type: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string
+          share_type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_shares_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_shares_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_shares_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
       }
       post_views: {
         Row: {
+          completion_rate: number | null
           id: string
           post_id: string
+          session_id: string | null
           user_id: string | null
           viewed_at: string | null
           watch_duration: number | null
         }
         Insert: {
+          completion_rate?: number | null
           id?: string
           post_id: string
+          session_id?: string | null
           user_id?: string | null
           viewed_at?: string | null
           watch_duration?: number | null
         }
         Update: {
+          completion_rate?: number | null
           id?: string
           post_id?: string
+          session_id?: string | null
           user_id?: string | null
           viewed_at?: string | null
           watch_duration?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "post_views_post_id_fkey"
             columns: ["post_id"]
@@ -298,6 +388,8 @@ export type Database = {
           likes_count: number | null
           media_type: string
           media_url: string
+          saves_count: number | null
+          shares_count: number | null
           user_id: string
           views_count: number | null
         }
@@ -309,6 +401,8 @@ export type Database = {
           likes_count?: number | null
           media_type: string
           media_url: string
+          saves_count?: number | null
+          shares_count?: number | null
           user_id: string
           views_count?: number | null
         }
@@ -320,6 +414,8 @@ export type Database = {
           likes_count?: number | null
           media_type?: string
           media_url?: string
+          saves_count?: number | null
+          shares_count?: number | null
           user_id?: string
           views_count?: number | null
         }
@@ -369,9 +465,78 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_posts: {
+        Row: {
+          created_at: string | null
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_posts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "enhanced_engagement_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_posts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      enhanced_engagement_posts: {
+        Row: {
+          avg_completion_rate: number | null
+          avg_watch_duration: number | null
+          caption: string | null
+          comments_count: number | null
+          created_at: string | null
+          enhanced_engagement_score: number | null
+          id: string | null
+          likes_count: number | null
+          media_type: string | null
+          media_url: string | null
+          saves_count: number | null
+          shares_count: number | null
+          user_id: string | null
+          views_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       extract_hashtags: {

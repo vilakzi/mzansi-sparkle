@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { CommentSheet } from "./CommentSheet";
+import { ShareSheet } from "./ShareSheet";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useVideoTracking } from "@/hooks/useVideoTracking";
 
 interface FeedPostProps {
   id: string;
@@ -12,9 +16,12 @@ interface FeedPostProps {
   caption?: string;
   likesCount: number;
   commentsCount: number;
+  sharesCount: number;
+  isSaved: boolean;
   isLiked: boolean;
   isActive: boolean;
   onLike: () => void;
+  onSaveToggle: () => void;
   profile?: {
     display_name: string;
     username: string;
@@ -29,14 +36,21 @@ export const FeedPost = ({
   caption,
   likesCount,
   commentsCount,
+  sharesCount,
+  isSaved,
   isLiked,
   isActive,
   onLike,
+  onSaveToggle,
   profile,
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+
+  // Track video engagement
+  useVideoTracking({ postId: id, videoRef, isActive });
 
   useEffect(() => {
     if (videoRef.current) {
@@ -120,26 +134,48 @@ export const FeedPost = ({
         
         {renderCaption()}
         
-        <div className="flex items-center gap-6">
-          <button
-            onClick={handleLike}
-            className="flex items-center gap-2 text-white transition-transform active:scale-90"
-          >
-            <Heart
-              className={cn(
-                "h-8 w-8",
-                isLiked && "fill-red-500 text-red-500"
-              )}
-            />
-            <span className="text-lg font-semibold">{likesCount}</span>
-          </button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <button
+              onClick={handleLike}
+              className="flex items-center gap-2 text-white transition-transform active:scale-90"
+            >
+              <Heart
+                className={cn(
+                  "h-8 w-8",
+                  isLiked && "fill-red-500 text-red-500"
+                )}
+              />
+              <span className="text-lg font-semibold">{likesCount}</span>
+            </button>
+            
+            <button
+              onClick={() => setShowComments(true)}
+              className="flex items-center gap-2 text-white transition-transform active:scale-90"
+            >
+              <MessageCircle className="h-8 w-8" />
+              <span className="text-lg font-semibold">{commentsCount}</span>
+            </button>
+            
+            <button
+              onClick={() => setShowShare(true)}
+              className="flex items-center gap-2 text-white transition-transform active:scale-90"
+            >
+              <Share2 className="h-8 w-8" />
+              <span className="text-lg font-semibold">{sharesCount}</span>
+            </button>
+          </div>
           
           <button
-            onClick={() => setShowComments(true)}
-            className="flex items-center gap-2 text-white transition-transform active:scale-90"
+            onClick={onSaveToggle}
+            className="text-white transition-transform active:scale-90"
           >
-            <MessageCircle className="h-8 w-8" />
-            <span className="text-lg font-semibold">{commentsCount}</span>
+            <Bookmark
+              className={cn(
+                "h-8 w-8",
+                isSaved && "fill-white"
+              )}
+            />
           </button>
         </div>
       </div>
@@ -148,6 +184,12 @@ export const FeedPost = ({
         postId={id} 
         isOpen={showComments} 
         onClose={() => setShowComments(false)} 
+      />
+      
+      <ShareSheet
+        postId={id}
+        isOpen={showShare}
+        onClose={() => setShowShare(false)}
       />
     </div>
   );

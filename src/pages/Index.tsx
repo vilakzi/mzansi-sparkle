@@ -5,7 +5,7 @@ import { VerticalFeed } from "@/components/VerticalFeed";
 import { UploadButton } from "@/components/UploadButton";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { LogOut, User as UserIcon, Search, TrendingUp } from "lucide-react";
+import { LogOut, User as UserIcon, Search, TrendingUp, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 
 type Profile = {
@@ -88,6 +88,13 @@ const Index = () => {
                 onClick={() => navigate("/trending")}
               >
                 <TrendingUp className="h-5 w-5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => navigate("/saved")}
+              >
+                <Bookmark className="h-5 w-5" />
               </Button>
             </div>
             
