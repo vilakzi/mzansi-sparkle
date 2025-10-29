@@ -53,6 +53,9 @@ export const FeedPost = ({
   const [progress, setProgress] = useState(0);
   const [showHeart, setShowHeart] = useState(false);
   const lastTapRef = useRef<number>(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
@@ -74,13 +77,25 @@ export const FeedPost = ({
     if (!video) return;
 
     const updateProgress = () => {
-      const progress = (video.currentTime / video.duration) * 100;
-      setProgress(progress);
+      if (!isScrubbing) {
+        const progress = (video.currentTime / video.duration) * 100;
+        setProgress(progress);
+        setCurrentTime(video.currentTime);
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
     };
 
     video.addEventListener('timeupdate', updateProgress);
-    return () => video.removeEventListener('timeupdate', updateProgress);
-  }, []);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    
+    return () => {
+      video.removeEventListener('timeupdate', updateProgress);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [isScrubbing]);
 
   const handleVideoClick = () => {
     const now = Date.now();
@@ -113,6 +128,52 @@ export const FeedPost = ({
       videoRef.current.muted = !isMuted;
       setIsMuted(!isMuted);
     }
+  };
+
+  const handleSeekBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    seekToPercentage(percentage);
+  };
+
+  const handleSeekBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setIsScrubbing(true);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touchX = e.touches[0].clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, touchX / rect.width));
+    
+    const newProgress = percentage * 100;
+    setProgress(newProgress);
+    
+    if (videoRef.current) {
+      const newTime = percentage * videoRef.current.duration;
+      setCurrentTime(newTime);
+    }
+  };
+
+  const handleSeekBarTouchEnd = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = (progress / 100) * videoRef.current.duration;
+    }
+    setIsScrubbing(false);
+  };
+
+  const seekToPercentage = (percentage: number) => {
+    if (videoRef.current) {
+      const newTime = percentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(percentage * 100);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleLike = () => {
@@ -162,12 +223,29 @@ export const FeedPost = ({
             muted={isMuted}
           />
           
-          {/* Progress bar */}
-          <div className="absolute bottom-20 left-0 right-0 h-1 bg-white/30">
+          {/* Interactive seekbar */}
+          <div className="absolute bottom-20 left-0 right-0 px-4">
+            <div className="flex items-center gap-2 text-white text-xs mb-1">
+              <span>{formatTime(currentTime)}</span>
+              <span>/</span>
+              <span>{formatTime(duration)}</span>
+            </div>
             <div 
-              className="h-full bg-white transition-all duration-100"
-              style={{ width: `${progress}%` }}
-            />
+              className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
+              onClick={handleSeekBarClick}
+              onTouchStart={handleSeekBarTouch}
+              onTouchMove={handleSeekBarTouch}
+              onTouchEnd={handleSeekBarTouchEnd}
+            >
+              <div 
+                className="h-full bg-white rounded-full transition-all duration-100"
+                style={{ width: `${progress}%` }}
+              />
+              <div 
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+              />
+            </div>
           </div>
 
           {/* Play/Pause indicator */}
