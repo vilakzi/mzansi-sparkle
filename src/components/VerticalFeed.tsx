@@ -10,6 +10,11 @@ interface Post {
   caption?: string;
   likes_count: number;
   user_liked?: boolean;
+  profile?: {
+    display_name: string;
+    username: string;
+    avatar_url: string | null;
+  };
 }
 
 export const VerticalFeed = () => {
@@ -26,7 +31,14 @@ export const VerticalFeed = () => {
   const fetchPosts = async () => {
     const { data: postsData, error } = await supabase
       .from("posts")
-      .select("*")
+      .select(`
+        *,
+        profiles:user_id (
+          display_name,
+          username,
+          avatar_url
+        )
+      `)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -51,14 +63,18 @@ export const VerticalFeed = () => {
       const likedPostIds = new Set(userLikes?.map(like => like.post_id) || []);
       
       // Add user_liked flag to each post
-      const postsWithLikes = postsData.map(post => ({
+      const postsWithLikes = postsData.map((post: any) => ({
         ...post,
-        user_liked: likedPostIds.has(post.id)
+        user_liked: likedPostIds.has(post.id),
+        profile: post.profiles
       })) as Post[];
       
       setPosts(postsWithLikes);
     } else {
-      setPosts((postsData || []) as Post[]);
+      setPosts((postsData || []).map((post: any) => ({
+        ...post,
+        profile: post.profiles
+      })) as Post[]);
     }
     
     setLoading(false);
@@ -159,6 +175,7 @@ export const VerticalFeed = () => {
             isLiked={post.user_liked || false}
             isActive={index === currentIndex}
             onLike={() => handleLike(post.id)}
+            profile={post.profile}
           />
         ))}
       </div>

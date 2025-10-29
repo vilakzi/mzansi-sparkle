@@ -19,10 +19,18 @@ const authSchema = z.object({
     .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
 });
 
+const signupSchema = authSchema.extend({
+  displayName: z.string().trim().min(2, "Display name must be at least 2 characters").max(50, "Display name must be less than 50 characters"),
+  username: z.string().trim().min(3, "Username must be at least 3 characters").max(20, "Username must be less than 20 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+});
+
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -40,7 +48,10 @@ const Auth = () => {
 
     try {
       // Validate input before submitting
-      const validation = authSchema.safeParse({ email, password });
+      const validation = isLogin 
+        ? authSchema.safeParse({ email, password })
+        : signupSchema.safeParse({ email, password, displayName, username });
+        
       if (!validation.success) {
         toast.error(validation.error.errors[0].message);
         setLoading(false);
@@ -56,11 +67,16 @@ const Auth = () => {
         toast.success("Logged in successfully!");
         navigate("/");
       } else {
+        const validatedData = validation.data as z.infer<typeof signupSchema>;
         const { error } = await supabase.auth.signUp({
-          email: validation.data.email,
-          password: validation.data.password,
+          email: validatedData.email,
+          password: validatedData.password,
           options: {
             emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              display_name: validatedData.displayName,
+              username: validatedData.username,
+            }
           },
         });
         if (error) throw error;
@@ -100,6 +116,32 @@ const Auth = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">Display Name</Label>
+                  <Input
+                    id="displayName"
+                    type="text"
+                    placeholder="John Doe"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="johndoe"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                  />
+                </div>
+              </>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

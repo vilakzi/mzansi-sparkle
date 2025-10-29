@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      follows: {
+        Row: {
+          created_at: string | null
+          follower_id: string
+          following_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          follower_id: string
+          following_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          follower_id?: string
+          following_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follows_follower_id_fkey"
+            columns: ["follower_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follows_following_id_fkey"
+            columns: ["following_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_likes: {
         Row: {
           created_at: string
@@ -74,6 +110,50 @@ export type Database = {
           user_id?: string
           views_count?: number | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          display_name: string
+          followers_count: number | null
+          following_count: number | null
+          id: string
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          display_name: string
+          followers_count?: number | null
+          following_count?: number | null
+          id: string
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string
+          followers_count?: number | null
+          following_count?: number | null
+          id?: string
+          updated_at?: string | null
+          username?: string
+        }
         Relationships: []
       }
     }
@@ -81,6 +161,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      toggle_follow: {
+        Args: { p_following_id: string }
+        Returns: {
+          is_following: boolean
+          new_follower_count: number
+          new_following_count: number
+        }[]
+      }
       toggle_post_like: {
         Args: { p_post_id: string }
         Returns: {

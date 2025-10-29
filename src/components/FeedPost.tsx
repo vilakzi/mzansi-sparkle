@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useNavigate } from "react-router-dom";
 
 interface FeedPostProps {
   id: string;
@@ -11,6 +13,11 @@ interface FeedPostProps {
   isLiked: boolean;
   isActive: boolean;
   onLike: () => void;
+  profile?: {
+    display_name: string;
+    username: string;
+    avatar_url: string | null;
+  };
 }
 
 export const FeedPost = ({
@@ -21,8 +28,10 @@ export const FeedPost = ({
   isLiked,
   isActive,
   onLike,
+  profile,
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (videoRef.current) {
@@ -58,6 +67,21 @@ export const FeedPost = ({
       )}
       
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6">
+        {profile && (
+          <div 
+            className="flex items-center gap-3 mb-4 cursor-pointer"
+            onClick={() => navigate(`/profile/${profile.username}`)}
+          >
+            <Avatar className="h-10 w-10 border-2 border-white">
+              <AvatarImage src={profile.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {profile.display_name[0].toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-white font-semibold text-lg">{profile.username}</span>
+          </div>
+        )}
+        
         {caption && (
           <p className="mb-4 text-white text-lg font-medium">{caption}</p>
         )}
