@@ -320,26 +320,25 @@ export const FeedPost = ({
         />
       )}
       
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-24">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32">
         {profile && (
-          <div 
-            className="flex items-center gap-3 mb-4 cursor-pointer"
-            onClick={() => navigate(`/profile/${profile.username}`)}
-          >
-            <Avatar className="h-10 w-10 border-2 border-white">
+          <div className="mb-4">
+            <Avatar 
+              className="h-12 w-12 border-2 border-white cursor-pointer transition-transform active:scale-90"
+              onClick={() => navigate(`/profile/${profile.username}`)}
+            >
               <AvatarImage src={profile.avatar_url || undefined} />
               <AvatarFallback className="bg-primary text-primary-foreground">
                 {profile.display_name[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <span className="text-white font-semibold text-lg">{profile.username}</span>
           </div>
         )}
         
         
         {renderCaption()}
         
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-6">
             <button
               onClick={handleLike}
