@@ -58,6 +58,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "trending_posts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "comments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -101,6 +108,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      hashtags: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          posts_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          posts_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          posts_count?: number | null
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
@@ -156,10 +184,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "trending_posts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_hashtags: {
+        Row: {
+          created_at: string | null
+          hashtag_id: string
+          id: string
+          post_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          hashtag_id: string
+          id?: string
+          post_id: string
+        }
+        Update: {
+          created_at?: string | null
+          hashtag_id?: string
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_hashtags_hashtag_id_fkey"
+            columns: ["hashtag_id"]
+            isOneToOne: false
+            referencedRelation: "hashtags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_hashtags_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_hashtags_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "trending_posts"
             referencedColumns: ["id"]
           },
         ]
@@ -189,6 +267,59 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "trending_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_views: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string | null
+          viewed_at: string | null
+          watch_duration: number | null
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id?: string | null
+          viewed_at?: string | null
+          watch_duration?: number | null
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string | null
+          viewed_at?: string | null
+          watch_duration?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "trending_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -275,9 +406,59 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      trending_posts: {
+        Row: {
+          caption: string | null
+          comments_count: number | null
+          created_at: string | null
+          engagement_score: number | null
+          id: string | null
+          likes_count: number | null
+          media_type: string | null
+          media_url: string | null
+          user_id: string | null
+          views_count: number | null
+        }
+        Insert: {
+          caption?: string | null
+          comments_count?: number | null
+          created_at?: string | null
+          engagement_score?: never
+          id?: string | null
+          likes_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          user_id?: string | null
+          views_count?: number | null
+        }
+        Update: {
+          caption?: string | null
+          comments_count?: number | null
+          created_at?: string | null
+          engagement_score?: never
+          id?: string | null
+          likes_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          user_id?: string | null
+          views_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      extract_hashtags: {
+        Args: { p_caption: string; p_post_id: string }
+        Returns: undefined
+      }
       toggle_follow: {
         Args: { p_following_id: string }
         Returns: {
