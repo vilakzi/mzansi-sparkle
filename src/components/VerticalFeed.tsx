@@ -11,6 +11,7 @@ interface Post {
   likes_count: number;
   comments_count: number;
   shares_count: number;
+  created_at: string;
   user_liked?: boolean;
   user_saved?: boolean;
   profile?: {
@@ -24,15 +25,44 @@ export const VerticalFeed = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const lastPostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchPosts();
-    setupRealtimeSubscription();
+    const cleanup = setupRealtimeSubscription();
+    return cleanup;
   }, []);
 
-  const fetchPosts = async () => {
-    const { data: postsData, error } = await supabase
+  useEffect(() => {
+    // Setup intersection observer for infinite scroll
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMore();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    if (lastPostRef.current) {
+      observerRef.current.observe(lastPostRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [hasMore, loadingMore, loading, posts.length]);
+
+  const fetchPosts = async (cursor?: string) => {
+    const BATCH_SIZE = 15;
+    
+    let query = supabase
       .from("posts")
       .select(`
         *,
@@ -42,7 +72,14 @@ export const VerticalFeed = () => {
           avatar_url
         )
       `)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(BATCH_SIZE);
+
+    if (cursor) {
+      query = query.lt("created_at", cursor);
+    }
+
+    const { data: postsData, error } = await query;
 
     if (error) {
       toast.error("Failed to load posts");
@@ -50,7 +87,13 @@ export const VerticalFeed = () => {
         console.error(error);
       }
       setLoading(false);
+      setLoadingMore(false);
       return;
+    }
+
+    // Check if there are more posts
+    if (!postsData || postsData.length < BATCH_SIZE) {
+      setHasMore(false);
     }
 
     // Get current user
@@ -58,15 +101,18 @@ export const VerticalFeed = () => {
     
     if (user && postsData) {
       // Fetch user's likes and saved posts
+      const postIds = postsData.map((p: any) => p.id);
       const [{ data: userLikes }, { data: userSaved }] = await Promise.all([
         supabase
           .from("post_likes")
           .select("post_id")
-          .eq("user_id", user.id),
+          .eq("user_id", user.id)
+          .in("post_id", postIds),
         supabase
           .from("saved_posts")
           .select("post_id")
           .eq("user_id", user.id)
+          .in("post_id", postIds)
       ]);
       
       const likedPostIds = new Set(userLikes?.map(like => like.post_id) || []);
@@ -80,17 +126,36 @@ export const VerticalFeed = () => {
         profile: post.profiles
       })) as Post[];
       
-      setPosts(postsWithLikes);
+      if (cursor) {
+        setPosts((current) => [...current, ...postsWithLikes]);
+      } else {
+        setPosts(postsWithLikes);
+      }
     } else {
-      setPosts((postsData || []).map((post: any) => ({
+      const newPosts = (postsData || []).map((post: any) => ({
         ...post,
         user_liked: false,
         user_saved: false,
         profile: post.profiles
-      })) as Post[]);
+      })) as Post[];
+      
+      if (cursor) {
+        setPosts((current) => [...current, ...newPosts]);
+      } else {
+        setPosts(newPosts);
+      }
     }
     
     setLoading(false);
+    setLoadingMore(false);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || posts.length === 0) return;
+    
+    setLoadingMore(true);
+    const lastPost = posts[posts.length - 1];
+    await fetchPosts(lastPost.created_at);
   };
 
   const setupRealtimeSubscription = () => {
@@ -244,23 +309,32 @@ export const VerticalFeed = () => {
         onScroll={handleScroll}
       >
         {posts.map((post, index) => (
-          <FeedPost
+          <div
             key={post.id}
-            id={post.id}
-            mediaUrl={post.media_url}
-            mediaType={post.media_type}
-            caption={post.caption}
-            likesCount={post.likes_count}
-            commentsCount={post.comments_count}
-            sharesCount={post.shares_count}
-            isSaved={post.user_saved || false}
-            isLiked={post.user_liked || false}
-            isActive={index === currentIndex}
-            onLike={() => handleLike(post.id)}
-            onSaveToggle={() => handleSaveToggle(post.id)}
-            profile={post.profile}
-          />
+            ref={index === posts.length - 3 ? lastPostRef : null}
+          >
+            <FeedPost
+              id={post.id}
+              mediaUrl={post.media_url}
+              mediaType={post.media_type}
+              caption={post.caption}
+              likesCount={post.likes_count}
+              commentsCount={post.comments_count}
+              sharesCount={post.shares_count}
+              isSaved={post.user_saved || false}
+              isLiked={post.user_liked || false}
+              isActive={index === currentIndex}
+              onLike={() => handleLike(post.id)}
+              onSaveToggle={() => handleSaveToggle(post.id)}
+              profile={post.profile}
+            />
+          </div>
         ))}
+        {loadingMore && (
+          <div className="flex h-screen items-center justify-center">
+            <p className="text-muted-foreground">Loading more posts...</p>
+          </div>
+        )}
       </div>
     </div>
   );
