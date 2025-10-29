@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { CommentSheet } from "./CommentSheet";
 import { ShareSheet } from "./ShareSheet";
+import { ReportDialog } from "./ReportDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useVideoTracking } from "@/hooks/useVideoTracking";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 interface FeedPostProps {
   id: string;
@@ -48,6 +56,7 @@ export const FeedPost = ({
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [progress, setProgress] = useState(0);
@@ -342,10 +351,29 @@ export const FeedPost = ({
           {/* Volume control */}
           <button
             onClick={toggleMute}
-            className="absolute top-6 right-6 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
+            className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
           >
             {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
           </button>
+
+          {/* More options menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
+              >
+                <MoreVertical className="h-6 w-6" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="z-[100]">
+              <DropdownMenuItem onClick={() => setShowReport(true)}>
+                <Flag className="h-4 w-4 mr-2" />
+                Report Post
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       ) : (
         <img
@@ -429,6 +457,12 @@ export const FeedPost = ({
         postId={id}
         isOpen={showShare}
         onClose={() => setShowShare(false)}
+      />
+
+      <ReportDialog
+        isOpen={showReport}
+        onClose={() => setShowReport(false)}
+        postId={id}
       />
     </div>
   );

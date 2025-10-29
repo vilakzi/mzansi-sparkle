@@ -5,9 +5,16 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, UserPlus, UserMinus } from "lucide-react";
+import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { FeedPost } from "@/components/FeedPost";
+import { ReportDialog } from "@/components/ReportDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Profile = {
   id: string;
@@ -37,6 +44,8 @@ const Profile = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showReport, setShowReport] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -148,12 +157,52 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto">
-        <div className="p-4 flex items-center gap-4 border-b">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-xl font-semibold">{profile.username}</h1>
+        <div className="p-4 flex items-center justify-between border-b">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-xl font-semibold">{profile.username}</h1>
+          </div>
+          {isOwnProfile ? (
+            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
+              <Settings className="h-5 w-5" />
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowReport(true)}>
+                  Report User
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!currentUserId) return;
+                  const { error } = await supabase.from("blocked_users").insert({
+                    blocker_id: currentUserId,
+                    blocked_id: profile.id,
+                  });
+                  if (!error) {
+                    setIsBlocked(true);
+                    toast.success("User blocked");
+                  }
+                }}>
+                  <ShieldAlert className="h-4 w-4 mr-2" />
+                  Block User
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
+        
+        <ReportDialog
+          isOpen={showReport}
+          onClose={() => setShowReport(false)}
+          userId={profile.id}
+        />
 
         <div className="p-6">
           <div className="flex items-start gap-6 mb-6">
