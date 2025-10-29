@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -48,6 +48,11 @@ export const FeedPost = ({
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [showHeart, setShowHeart] = useState(false);
+  const lastTapRef = useRef<number>(0);
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
@@ -56,11 +61,59 @@ export const FeedPost = ({
     if (videoRef.current) {
       if (isActive) {
         videoRef.current.play();
+        setIsPlaying(true);
       } else {
         videoRef.current.pause();
+        setIsPlaying(false);
       }
     }
   }, [isActive]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const updateProgress = () => {
+      const progress = (video.currentTime / video.duration) * 100;
+      setProgress(progress);
+    };
+
+    video.addEventListener('timeupdate', updateProgress);
+    return () => video.removeEventListener('timeupdate', updateProgress);
+  }, []);
+
+  const handleVideoClick = () => {
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapRef.current;
+
+    if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+      // Double tap - like
+      handleLike();
+      setShowHeart(true);
+      setTimeout(() => setShowHeart(false), 1000);
+    } else {
+      // Single tap - play/pause
+      if (videoRef.current) {
+        if (isPlaying) {
+          videoRef.current.pause();
+          setIsPlaying(false);
+        } else {
+          videoRef.current.play();
+          setIsPlaying(true);
+        }
+      }
+    }
+
+    lastTapRef.current = now;
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
 
   const handleLike = () => {
     onLike();
@@ -99,14 +152,51 @@ export const FeedPost = ({
   return (
     <div className="relative h-screen w-full snap-start snap-always">
       {mediaType === "video" ? (
-        <video
-          ref={videoRef}
-          src={mediaUrl}
-          className="h-full w-full object-cover"
-          loop
-          playsInline
-          muted
-        />
+        <div className="relative h-full w-full" onClick={handleVideoClick}>
+          <video
+            ref={videoRef}
+            src={mediaUrl}
+            className="h-full w-full object-cover"
+            loop
+            playsInline
+            muted={isMuted}
+          />
+          
+          {/* Progress bar */}
+          <div className="absolute bottom-20 left-0 right-0 h-1 bg-white/30">
+            <div 
+              className="h-full bg-white transition-all duration-100"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          {/* Play/Pause indicator */}
+          {!isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/50 rounded-full p-4">
+                <Play className="h-16 w-16 text-white" fill="white" />
+              </div>
+            </div>
+          )}
+
+          {/* Double tap heart animation */}
+          {showHeart && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <Heart 
+                className="h-32 w-32 text-red-500 animate-ping" 
+                fill="red"
+              />
+            </div>
+          )}
+
+          {/* Volume control */}
+          <button
+            onClick={toggleMute}
+            className="absolute top-6 right-6 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10"
+          >
+            {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
+          </button>
+        </div>
       ) : (
         <img
           src={mediaUrl}
