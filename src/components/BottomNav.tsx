@@ -101,8 +101,10 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t">
-      <div className="flex justify-around items-center h-16 max-w-2xl mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t safe-bottom">
+      <div className="flex justify-around items-center h-16 max-w-2xl mx-auto pb-safe"
+        style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+      >
         {navItems.map((item) => (
           <Button
             key={item.path}

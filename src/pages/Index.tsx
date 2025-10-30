@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { VerticalFeed } from "@/components/VerticalFeed";
 import { UploadButton } from "@/components/UploadButton";
 import { BottomNav } from "@/components/BottomNav";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { toast } from "sonner";
 
 type Profile = {
@@ -73,7 +74,9 @@ const Index = () => {
   }
 
   return (
-    <div className="relative bg-background">
+    <div className="relative bg-background min-h-screen">
+      <PWAInstallPrompt />
+      
       <div className="flex justify-center">
         <div className="relative w-full max-w-md">
           <VerticalFeed />
