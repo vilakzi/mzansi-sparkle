@@ -12,6 +12,7 @@ interface Post {
   comments_count: number;
   shares_count: number;
   created_at: string;
+  user_id: string;
   user_liked?: boolean;
   user_saved?: boolean;
   profile?: {
@@ -285,6 +286,66 @@ export const VerticalFeed = () => {
     }
   };
 
+  const handleDeletePost = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    // Optimistically remove from UI
+    setPosts((current) => current.filter(p => p.id !== postId));
+
+    // Show undo toast with action
+    const undoToastId = toast.success("Post deleted", {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          // Restore post to UI
+          setPosts((current) => {
+            const newPosts = [...current];
+            const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
+            if (insertIndex === -1) {
+              newPosts.push(post);
+            } else {
+              newPosts.splice(insertIndex, 0, post);
+            }
+            return newPosts;
+          });
+          clearTimeout(deleteTimeoutId);
+        }
+      },
+      duration: 5000,
+    });
+
+    // Set timeout for actual deletion
+    const deleteTimeoutId = setTimeout(async () => {
+      try {
+        // Delete from database
+        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
+          p_post_id: postId
+        });
+
+        if (deleteError) throw deleteError;
+
+        // Delete from storage
+        const storagePath = post.media_url.split('/').slice(-2).join('/');
+        await supabase.storage.from('posts-media').remove([storagePath]);
+      } catch (error: any) {
+        console.error('Error deleting post:', error);
+        // Restore post on error
+        setPosts((current) => {
+          const newPosts = [...current];
+          const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
+          if (insertIndex === -1) {
+            newPosts.push(post);
+          } else {
+            newPosts.splice(insertIndex, 0, post);
+          }
+          return newPosts;
+        });
+        toast.error("Failed to delete post");
+      }
+    }, 5000);
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -326,6 +387,8 @@ export const VerticalFeed = () => {
               isActive={index === currentIndex}
               onLike={() => handleLike(post.id)}
               onSaveToggle={() => handleSaveToggle(post.id)}
+              onDelete={() => handleDeletePost(post.id)}
+              userId={post.user_id}
               profile={post.profile}
             />
           </div>

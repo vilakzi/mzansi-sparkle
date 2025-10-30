@@ -16,7 +16,8 @@ import { AvatarUpload } from './AvatarUpload';
 import { useUsernameAvailability } from '@/hooks/useUsernameAvailability';
 import { resizeImage } from '@/lib/imageProcessing';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Check, X } from 'lucide-react';
+import { Loader2, Check, X, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Profile {
   id: string;
@@ -24,6 +25,7 @@ interface Profile {
   display_name: string;
   bio?: string;
   avatar_url?: string;
+  username_updated_at?: string;
 }
 
 interface EditProfileDialogProps {
@@ -51,6 +53,15 @@ export function EditProfileDialog({
     username,
     profile.id
   );
+
+  // Calculate username cooldown
+  const daysSinceLastChange = profile.username_updated_at 
+    ? Math.floor((Date.now() - new Date(profile.username_updated_at).getTime()) / (1000 * 60 * 60 * 24))
+    : Infinity;
+
+  const canChangeUsername = daysSinceLastChange >= 30;
+  const daysUntilChange = Math.max(0, 30 - daysSinceLastChange);
+  const usernameChanged = username !== profile.username;
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -95,13 +106,24 @@ export function EditProfileDialog({
       return;
     }
 
-    if (username !== profile.username && !isAvailable) {
-      toast({
-        title: 'Error',
-        description: usernameError || 'Username is not available',
-        variant: 'destructive',
-      });
-      return;
+    if (username !== profile.username) {
+      if (!canChangeUsername) {
+        toast({
+          title: 'Error',
+          description: `You can change your username again in ${daysUntilChange} days`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!isAvailable) {
+        toast({
+          title: 'Error',
+          description: usernameError || 'Username is not available',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setLoading(true);
@@ -182,7 +204,7 @@ export function EditProfileDialog({
   const isFormValid =
     displayName.trim().length > 0 &&
     username.trim().length >= 3 &&
-    (username === profile.username || isAvailable);
+    (username === profile.username || (isAvailable && canChangeUsername));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -216,6 +238,22 @@ export function EditProfileDialog({
 
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
+            {usernameChanged && !canChangeUsername && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  You can change your username again in {daysUntilChange} {daysUntilChange === 1 ? 'day' : 'days'}
+                </AlertDescription>
+              </Alert>
+            )}
+            {usernameChanged && canChangeUsername && daysSinceLastChange < 60 && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Last changed {daysSinceLastChange} {daysSinceLastChange === 1 ? 'day' : 'days'} ago
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="relative">
               <Input
                 id="username"
@@ -224,10 +262,11 @@ export function EditProfileDialog({
                 placeholder="username"
                 maxLength={20}
                 className="pr-10"
+                disabled={usernameChanged && !canChangeUsername}
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {isChecking && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                {!isChecking && username.length >= 3 && username !== profile.username && (
+                {!isChecking && username.length >= 3 && username !== profile.username && canChangeUsername && (
                   <>
                     {isAvailable && <Check className="w-4 h-4 text-green-500" />}
                     {!isAvailable && <X className="w-4 h-4 text-destructive" />}
@@ -235,10 +274,10 @@ export function EditProfileDialog({
                 )}
               </div>
             </div>
-            {usernameError && username.length >= 3 && (
+            {usernameError && username.length >= 3 && canChangeUsername && (
               <p className="text-xs text-destructive">{usernameError}</p>
             )}
-            {username.length >= 3 && isAvailable && username !== profile.username && (
+            {username.length >= 3 && isAvailable && username !== profile.username && canChangeUsername && (
               <p className="text-xs text-green-600">Username is available</p>
             )}
           </div>

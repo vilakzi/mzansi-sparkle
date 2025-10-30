@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +30,8 @@ interface FeedPostProps {
   isActive: boolean;
   onLike: () => void;
   onSaveToggle: () => void;
+  onDelete?: () => void;
+  userId?: string;
   profile?: {
     display_name: string;
     username: string;
@@ -50,6 +52,8 @@ export const FeedPost = ({
   isActive,
   onLike,
   onSaveToggle,
+  onDelete,
+  userId,
   profile,
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,9 +70,18 @@ export const FeedPost = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const wasPlayingRef = useRef(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
+
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
+    };
+    getCurrentUser();
+  }, []);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -367,7 +380,16 @@ export const FeedPost = ({
                 <MoreVertical className="h-6 w-6" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="z-[100]">
+            <DropdownMenuContent align="end" className="z-[100] bg-background">
+              {currentUserId === userId && onDelete && (
+                <DropdownMenuItem 
+                  onClick={onDelete}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Post
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => setShowReport(true)}>
                 <Flag className="h-4 w-4 mr-2" />
                 Report Post

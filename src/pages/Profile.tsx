@@ -152,29 +152,52 @@ const Profile = () => {
   const handleDeletePost = async (postId: string) => {
     if (!currentUserId) return;
 
-    try {
-      // Get the post to delete
-      const postToRemove = posts.find(p => p.id === postId);
-      if (!postToRemove) return;
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
 
-      // Delete from database (will cascade to related tables)
-      const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
-        p_post_id: postId
-      });
+    // Optimistically remove from UI
+    setPosts((current) => current.filter(p => p.id !== postId));
 
-      if (deleteError) throw deleteError;
+    // Close the dialog
+    setPostToDelete(null);
 
-      // Delete from storage
-      const storagePath = postToRemove.media_url.split('/').slice(-2).join('/');
-      await supabase.storage.from('posts-media').remove([storagePath]);
+    // Show undo toast with action
+    toast.success("Post deleted", {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          // Restore post to UI
+          setPosts((current) => [...current, post].sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ));
+          clearTimeout(deleteTimeoutId);
+        }
+      },
+      duration: 5000,
+    });
 
-      // Update UI optimistically
-      setPosts(posts.filter(p => p.id !== postId));
-      toast.success("Post deleted successfully");
-    } catch (error: any) {
-      console.error('Error deleting post:', error);
-      toast.error(error.message || "Failed to delete post");
-    }
+    // Set timeout for actual deletion
+    const deleteTimeoutId = setTimeout(async () => {
+      try {
+        // Delete from database
+        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
+          p_post_id: postId
+        });
+
+        if (deleteError) throw deleteError;
+
+        // Delete from storage
+        const storagePath = post.media_url.split('/').slice(-2).join('/');
+        await supabase.storage.from('posts-media').remove([storagePath]);
+      } catch (error: any) {
+        console.error('Error deleting post:', error);
+        // Restore post on error
+        setPosts((current) => [...current, post].sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ));
+        toast.error("Failed to delete post");
+      }
+    }, 5000);
   };
 
   const refreshProfile = async () => {
