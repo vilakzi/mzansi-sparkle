@@ -497,6 +497,7 @@ export type Database = {
           id: string
           updated_at: string | null
           username: string
+          username_updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -508,6 +509,7 @@ export type Database = {
           id: string
           updated_at?: string | null
           username: string
+          username_updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -519,6 +521,7 @@ export type Database = {
           id?: string
           updated_at?: string | null
           username?: string
+          username_updated_at?: string | null
         }
         Relationships: []
       }
@@ -681,6 +684,14 @@ export type Database = {
       }
     }
     Functions: {
+      check_username_available: {
+        Args: { new_username: string; user_id: string }
+        Returns: boolean
+      }
+      delete_post_with_media: {
+        Args: { p_post_id: string }
+        Returns: undefined
+      }
       extract_hashtags: {
         Args: { p_caption: string; p_post_id: string }
         Returns: undefined
