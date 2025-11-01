@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, User, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 type PrivacySettings = {
@@ -105,6 +105,17 @@ const Settings = () => {
     } catch (error) {
       console.error("Error updating settings:", error);
       toast.error("Failed to update settings");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success("Logged out successfully");
+      navigate("/auth");
+    } catch (error) {
+      console.error("Error logging out:", error);
+      toast.error("Failed to log out");
     }
   };
 
@@ -247,6 +258,26 @@ const Settings = () => {
                     onCheckedChange={(checked) => updateSettings({ age_restricted_content: checked })}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Logout */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Session</CardTitle>
+                <CardDescription>
+                  Sign out of your account
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="destructive" 
+                  className="w-full justify-start"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Log Out
+                </Button>
               </CardContent>
             </Card>
           </div>
