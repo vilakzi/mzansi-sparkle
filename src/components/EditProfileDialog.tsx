@@ -131,9 +131,31 @@ export function EditProfileDialog({
     try {
       let newAvatarUrl = profile.avatar_url;
 
-      // Handle avatar upload
+      // Update profile first for instant feedback
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          display_name: displayName.trim(),
+          username: username.trim().toLowerCase(),
+          bio: bio.trim() || null,
+          username_updated_at: username !== profile.username ? new Date().toISOString() : undefined,
+        })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      // Close dialog and update UI immediately
+      onOpenChange(false);
+      onProfileUpdate();
+
+      toast({
+        title: 'Success',
+        description: 'Profile updated successfully',
+      });
+
+      // Handle avatar upload in background
       if (avatarFile) {
-        // Resize image before upload
+        // Resize image
         const resizedBlob = await resizeImage(avatarFile, 400, 400, 0.85);
         const timestamp = Date.now();
         const fileExt = avatarFile.name.split('.').pop();
@@ -161,34 +183,26 @@ export function EditProfileDialog({
           .getPublicUrl(filePath);
 
         newAvatarUrl = publicUrl;
+
+        // Update avatar URL
+        await supabase
+          .from('profiles')
+          .update({ avatar_url: newAvatarUrl })
+          .eq('id', profile.id);
+
+        onProfileUpdate();
       } else if (removeAvatar && profile.avatar_url) {
-        // Remove avatar
+        // Remove avatar in background
         const oldPath = profile.avatar_url.split('/').slice(-2).join('/');
         await supabase.storage.from('avatars').remove([oldPath]);
-        newAvatarUrl = null;
+        
+        await supabase
+          .from('profiles')
+          .update({ avatar_url: null })
+          .eq('id', profile.id);
+
+        onProfileUpdate();
       }
-
-      // Update profile
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          display_name: displayName.trim(),
-          username: username.trim().toLowerCase(),
-          bio: bio.trim() || null,
-          avatar_url: newAvatarUrl,
-          username_updated_at: username !== profile.username ? new Date().toISOString() : undefined,
-        })
-        .eq('id', profile.id);
-
-      if (updateError) throw updateError;
-
-      toast({
-        title: 'Success',
-        description: 'Profile updated successfully',
-      });
-
-      onProfileUpdate();
-      onOpenChange(false);
     } catch (error: any) {
       console.error('Error updating profile:', error);
       toast({
