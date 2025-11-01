@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Textarea } from "./ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { resizeImage } from "@/lib/imageProcessing";
 
 type UploadButtonProps = {
   onClose?: () => void;
@@ -49,13 +50,22 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
         return;
       }
 
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
       const mediaType = file.type.startsWith("video") ? "video" : "image";
+      let uploadFile: File | Blob = file;
+      let fileExt = file.name.split(".").pop();
+
+      // Process images to ensure compatibility
+      if (mediaType === "image") {
+        const resizedBlob = await resizeImage(file, 1920, 1920, 0.85);
+        uploadFile = resizedBlob;
+        fileExt = "jpg";
+      }
+
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("posts-media")
-        .upload(fileName, file);
+        .upload(fileName, uploadFile);
 
       if (uploadError) throw uploadError;
 
