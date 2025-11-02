@@ -934,6 +934,7 @@ export type Database = {
           views_count: number
         }[]
       }
+      get_initial_feed_data: { Args: { p_user_id: string }; Returns: Json }
       get_mixed_feed: {
         Args: { p_limit?: number; p_offset?: number; p_user_id: string }
         Returns: {
