@@ -149,7 +149,10 @@ export const VerticalFeed = () => {
           p_offset: cursor ? posts.length : 0
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error("get_following_feed RPC error:", error);
+          throw error;
+        }
         fetchedPosts = data || [];
       } else {
         // Use mixed feed for better content diversity
@@ -159,7 +162,10 @@ export const VerticalFeed = () => {
           p_offset: cursor ? posts.length : 0
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error("get_mixed_feed RPC error:", error);
+          throw error;
+        }
         fetchedPosts = data || [];
       }
 
@@ -193,14 +199,20 @@ export const VerticalFeed = () => {
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
-    } catch (error) {
-      toast.error("Failed to load posts");
-      if (import.meta.env.DEV) {
-        console.error(error);
-      }
+    } catch (error: any) {
+      console.error(`Feed fetch error (${feedType}):`, error);
+      
+      // Show detailed error in development
+      const errorMessage = import.meta.env.DEV 
+        ? `Failed to load posts: ${error.message || JSON.stringify(error)}`
+        : "Failed to load posts";
+      
+      toast.error(errorMessage);
+      
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
+      setHasMore(false);
     }
   };
 
