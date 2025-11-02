@@ -41,6 +41,7 @@ export const VerticalFeed = () => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const profileCacheRef = useRef<Map<string, any>>(new Map());
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -102,17 +103,26 @@ export const VerticalFeed = () => {
   }, [posts.length]);
 
   const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
-    // Only fetch profile if not already present (for backwards compatibility)
-    const profilePromise = post.profile 
-      ? Promise.resolve({ data: post.profile })
-      : supabase
+    // Check profile cache first
+    let profile = post.profile;
+    if (!profile) {
+      const cached = profileCacheRef.current.get(post.user_id);
+      if (cached) {
+        profile = cached;
+      } else {
+        const { data } = await supabase
           .from("profiles")
           .select("username, display_name, avatar_url")
           .eq("id", post.user_id)
           .single();
+        profile = data;
+        if (data) {
+          profileCacheRef.current.set(post.user_id, data);
+        }
+      }
+    }
 
-    const [profileData, likeData, saveData] = await Promise.all([
-      profilePromise,
+    const [likeData, saveData] = await Promise.all([
       supabase
         .from("post_likes")
         .select("user_id")
@@ -129,7 +139,7 @@ export const VerticalFeed = () => {
 
     return {
       ...post,
-      profile: profileData.data,
+      profile,
       user_liked: !!likeData.data,
       user_saved: !!saveData.data
     };
@@ -153,7 +163,7 @@ export const VerticalFeed = () => {
         return;
       }
 
-      const BATCH_SIZE = 50;
+      const BATCH_SIZE = 15; // Reduced for faster initial load
       const offset = cursor ? posts.length : 0;
 
       let fetchedPosts: any[] = [];

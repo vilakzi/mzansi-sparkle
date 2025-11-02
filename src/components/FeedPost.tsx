@@ -318,6 +318,7 @@ export const FeedPost = ({
             loop
             playsInline
             muted={isMuted}
+            preload="metadata"
           />
 
           {/* Play/Pause indicator */}
