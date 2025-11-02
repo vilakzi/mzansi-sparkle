@@ -49,18 +49,29 @@ const Index = () => {
 
       setUser(session.user);
 
-      // Use optimized single-query function for initial load
-      const { data, error } = await supabase.rpc('get_initial_feed_data', {
-        p_user_id: session.user.id
+      // Fetch profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileData) {
+        setProfile(profileData);
+      }
+
+      // Use optimized feed function with small initial limit
+      const { data: feedData, error } = await supabase.rpc('get_complete_feed_data', {
+        p_user_id: session.user.id,
+        p_feed_type: 'for-you',
+        p_limit: 10,
+        p_offset: 0
       });
 
       if (error) throw error;
 
-      if (data && typeof data === 'object' && data !== null) {
-        const feedData = data as { profile: Profile; posts: any[] };
-        setProfile(feedData.profile);
-        setInitialPosts(feedData.posts || []);
-      }
+      const parsedData = feedData as { posts?: any[] } | null;
+      setInitialPosts(parsedData?.posts || []);
     } catch (error) {
       console.error("Error loading initial data:", error);
     } finally {

@@ -140,7 +140,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         return;
       }
 
-      const BATCH_SIZE = 15;
+      const BATCH_SIZE = 10;
       const offset = cursor ? posts.length : 0;
 
       // Use optimized RPC that returns everything in one query
