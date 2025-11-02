@@ -70,7 +70,23 @@ const Index = () => {
 
       if (error) throw error;
 
-      setInitialPosts(feedData || []);
+      // Map data to expected format with profile embedded
+      const posts = (feedData || []).map((post: any) => ({
+        ...post,
+        user_liked: post.is_liked,
+        user_saved: post.is_saved,
+        profile: {
+          id: post.user_id,
+          username: post.username,
+          display_name: post.display_name,
+          avatar_url: post.avatar_url,
+          bio: post.bio,
+          followers_count: post.followers_count,
+          following_count: post.following_count,
+        }
+      }));
+
+      setInitialPosts(posts);
     } catch (error) {
       console.error("Error loading initial data:", error);
     } finally {

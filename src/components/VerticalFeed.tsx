@@ -149,9 +149,20 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
       if (error) throw error;
 
-      const fetchedPosts = (feedData || []).map(post => ({
+      const fetchedPosts = (feedData || []).map((post: any) => ({
         ...post,
-        media_type: post.media_type as "image" | "video"
+        media_type: post.media_type as "image" | "video",
+        user_liked: post.is_liked,
+        user_saved: post.is_saved,
+        profile: {
+          id: post.user_id,
+          username: post.username,
+          display_name: post.display_name,
+          avatar_url: post.avatar_url,
+          bio: post.bio,
+          followers_count: post.followers_count,
+          following_count: post.following_count,
+        }
       }));
 
       if (isRefresh) {
@@ -250,10 +261,16 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Simplified tracking - just record the view
-      await supabase.from("post_views").insert({
-        post_id: postId,
-        user_id: user?.id || null,
+      // Non-blocking tracking - don't wait for response
+      queueMicrotask(async () => {
+        try {
+          await supabase.from("post_views").insert({
+            post_id: postId,
+            user_id: user?.id || null,
+          });
+        } catch (err) {
+          // Silently fail
+        }
       });
     } catch (error) {
       // Silently fail - view tracking is not critical
