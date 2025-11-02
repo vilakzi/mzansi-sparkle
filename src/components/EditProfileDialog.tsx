@@ -26,6 +26,7 @@ interface Profile {
   bio?: string;
   avatar_url?: string;
   username_updated_at?: string;
+  whatsapp_number?: string;
 }
 
 interface EditProfileDialogProps {
@@ -45,6 +46,7 @@ export function EditProfileDialog({
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [username, setUsername] = useState(profile.username);
   const [bio, setBio] = useState(profile.bio || '');
+  const [whatsappNumber, setWhatsappNumber] = useState(profile.whatsapp_number || '');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -69,6 +71,7 @@ export function EditProfileDialog({
       setDisplayName(profile.display_name);
       setUsername(profile.username);
       setBio(profile.bio || '');
+      setWhatsappNumber(profile.whatsapp_number || '');
       setAvatarFile(null);
       setAvatarPreview('');
       setRemoveAvatar(false);
@@ -138,6 +141,7 @@ export function EditProfileDialog({
           display_name: displayName.trim(),
           username: username.trim().toLowerCase(),
           bio: bio.trim() || null,
+          whatsapp_number: whatsappNumber.trim() || null,
           username_updated_at: username !== profile.username ? new Date().toISOString() : undefined,
         })
         .eq('id', profile.id);
@@ -308,6 +312,21 @@ export function EditProfileDialog({
             />
             <p className="text-xs text-muted-foreground text-right">
               {bio.length}/150
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp">WhatsApp Number</Label>
+            <Input
+              id="whatsapp"
+              value={whatsappNumber}
+              onChange={(e) => setWhatsappNumber(e.target.value)}
+              placeholder="+1234567890"
+              type="tel"
+              maxLength={20}
+            />
+            <p className="text-xs text-muted-foreground">
+              Add your WhatsApp number to let people message you directly
             </p>
           </div>
         </div>

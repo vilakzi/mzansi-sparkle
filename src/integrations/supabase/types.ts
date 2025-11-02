@@ -625,6 +625,7 @@ export type Database = {
           updated_at: string | null
           username: string
           username_updated_at: string | null
+          whatsapp_number: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -637,6 +638,7 @@ export type Database = {
           updated_at?: string | null
           username: string
           username_updated_at?: string | null
+          whatsapp_number?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -649,6 +651,7 @@ export type Database = {
           updated_at?: string | null
           username?: string
           username_updated_at?: string | null
+          whatsapp_number?: string | null
         }
         Relationships: []
       }

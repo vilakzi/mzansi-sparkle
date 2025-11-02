@@ -5,11 +5,12 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical, Edit, Trash2 } from "lucide-react";
+import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical, Edit, Trash2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { FeedPost } from "@/components/FeedPost";
 import { ReportDialog } from "@/components/ReportDialog";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ type Profile = {
   bio: string | null;
   followers_count: number;
   following_count: number;
+  whatsapp_number: string | null;
 };
 
 type Post = {
@@ -335,26 +337,36 @@ const Profile = () => {
             </Avatar>
 
             <div className="flex-1">
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-4 mb-4 flex-wrap">
                 <h2 className="text-2xl font-bold">{profile.display_name}</h2>
                 {!isOwnProfile && currentUserId && (
-                  <Button 
-                    onClick={handleFollow}
-                    variant={isFollowing ? "outline" : "default"}
-                    size="sm"
-                  >
-                    {isFollowing ? (
-                      <>
-                        <UserMinus className="h-4 w-4 mr-1" />
-                        Unfollow
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="h-4 w-4 mr-1" />
-                        Follow
-                      </>
+                  <>
+                    <Button 
+                      onClick={handleFollow}
+                      variant={isFollowing ? "outline" : "default"}
+                      size="sm"
+                    >
+                      {isFollowing ? (
+                        <>
+                          <UserMinus className="h-4 w-4 mr-1" />
+                          Unfollow
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          Follow
+                        </>
+                      )}
+                    </Button>
+                    {profile.whatsapp_number && (
+                      <WhatsAppButton
+                        phoneNumber={profile.whatsapp_number}
+                        displayName={profile.display_name}
+                        variant="outline"
+                        size="sm"
+                      />
                     )}
-                  </Button>
+                  </>
                 )}
               </div>
 
