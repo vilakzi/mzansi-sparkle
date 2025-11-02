@@ -375,6 +375,72 @@ export type Database = {
           },
         ]
       }
+      post_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_name: string
+          icon: string | null
+          id: string
+          name: string
+          posts_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          icon?: string | null
+          id?: string
+          name: string
+          posts_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          posts_count?: number | null
+        }
+        Relationships: []
+      }
+      post_category_mappings: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          id: string
+          post_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          id?: string
+          post_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_category_mappings_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "post_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_category_mappings_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_hashtags: {
         Row: {
           created_at: string | null
@@ -748,6 +814,41 @@ export type Database = {
           },
         ]
       }
+      user_interests: {
+        Row: {
+          created_at: string | null
+          hashtag_id: string
+          id: string
+          interest_score: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          hashtag_id: string
+          id?: string
+          interest_score?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          hashtag_id?: string
+          id?: string
+          interest_score?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_interests_hashtag_id_fkey"
+            columns: ["hashtag_id"]
+            isOneToOne: false
+            referencedRelation: "hashtags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -805,9 +906,42 @@ export type Database = {
           views_count: number
         }[]
       }
+      get_following_feed: {
+        Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+        Returns: {
+          caption: string
+          comments_count: number
+          created_at: string
+          id: string
+          likes_count: number
+          media_type: string
+          media_url: string
+          saves_count: number
+          shares_count: number
+          user_id: string
+          views_count: number
+        }[]
+      }
       get_or_create_conversation: {
         Args: { p_other_user_id: string }
         Returns: string
+      }
+      get_personalized_feed: {
+        Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+        Returns: {
+          caption: string
+          comments_count: number
+          created_at: string
+          id: string
+          likes_count: number
+          media_type: string
+          media_url: string
+          recommendation_score: number
+          saves_count: number
+          shares_count: number
+          user_id: string
+          views_count: number
+        }[]
       }
       get_trending_posts: {
         Args: { limit_count?: number }
@@ -853,6 +987,10 @@ export type Database = {
           liked: boolean
           new_count: number
         }[]
+      }
+      update_user_interests_from_interaction: {
+        Args: { p_post_id: string; p_user_id: string }
+        Returns: undefined
       }
     }
     Enums: {

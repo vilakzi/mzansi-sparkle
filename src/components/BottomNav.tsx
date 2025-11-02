@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Search, PlusCircle, MessageCircle, User } from "lucide-react";
+import { Home, Search, PlusCircle, Grid3x3, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,51 +16,6 @@ type BottomNavProps = {
 export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    fetchUnreadCount();
-    
-    // Subscribe to conversation changes for unread messages
-    const channel = supabase
-      .channel("conversations-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "conversation_participants",
-        },
-        () => {
-          fetchUnreadCount();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchUnreadCount = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Get total unread messages count from all conversations
-      const { data: participants, error } = await supabase
-        .from("conversation_participants")
-        .select("unread_count")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
-      const total = participants?.reduce((sum, p) => sum + (p.unread_count || 0), 0) || 0;
-      setUnreadCount(total);
-    } catch (error) {
-      console.error("Error fetching unread count:", error);
-    }
-  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -85,11 +40,10 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
       isSpecial: true,
     },
     {
-      path: "/messages",
-      icon: MessageCircle,
-      label: "Messages",
-      onClick: () => navigate("/messages"),
-      badge: unreadCount,
+      path: "/categories",
+      icon: Grid3x3,
+      label: "Categories",
+      onClick: () => navigate("/categories"),
     },
     {
       path: userProfile ? `/profile/${userProfile.username}` : "/profile",
@@ -122,14 +76,6 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
             )}
           >
             <item.icon className="h-6 w-6" />
-            {item.badge !== undefined && item.badge > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-1 -right-1 h-5 min-w-5 flex items-center justify-center p-0 text-xs"
-              >
-                {item.badge > 99 ? "99+" : item.badge}
-              </Badge>
-            )}
             <span className="sr-only">{item.label}</span>
           </Button>
         ))}

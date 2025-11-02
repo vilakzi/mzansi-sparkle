@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
 import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
 interface Post {
   id: string;
@@ -28,15 +29,38 @@ export const VerticalFeed = () => {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [feedType, setFeedType] = useState<"for-you" | "following">("for-you");
+  const [userId, setUserId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchPosts();
-    const cleanup = setupRealtimeSubscription();
-    return cleanup;
+    const initializeUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUserId(session.user.id);
+      }
+    };
+    initializeUser();
   }, []);
+
+  useEffect(() => {
+    if (userId) {
+      fetchPosts();
+      const cleanup = setupRealtimeSubscription();
+      return cleanup;
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) {
+      setPosts([]);
+      setHasMore(true);
+      setLoading(true);
+      fetchPosts();
+    }
+  }, [feedType, userId]);
 
   useEffect(() => {
     // Setup intersection observer for infinite scroll
@@ -61,102 +85,105 @@ export const VerticalFeed = () => {
   }, [hasMore, loadingMore, loading, posts.length]);
 
   const fetchPosts = async (cursor?: string) => {
-    const BATCH_SIZE = 15;
-    
-    let query = supabase
-      .from("posts")
-      .select(`
-        *,
-        profiles:user_id (
-          display_name,
-          username,
-          avatar_url
-        )
-      `)
-      .order("created_at", { ascending: false })
-      .limit(BATCH_SIZE);
+    try {
+      if (cursor) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
 
-    if (cursor) {
-      query = query.lt("created_at", cursor);
-    }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
 
-    const { data: postsData, error } = await query;
+      const BATCH_SIZE = 15;
+      let fetchedPosts: any[] = [];
 
-    if (error) {
+      if (feedType === "following") {
+        // Use the following feed function
+        const { data, error } = await supabase.rpc("get_following_feed", {
+          p_user_id: session.user.id,
+          p_limit: BATCH_SIZE,
+          p_offset: cursor ? posts.length : 0
+        });
+
+        if (error) throw error;
+        fetchedPosts = data || [];
+      } else {
+        // Use the personalized feed function
+        const { data, error } = await supabase.rpc("get_personalized_feed", {
+          p_user_id: session.user.id,
+          p_limit: BATCH_SIZE,
+          p_offset: cursor ? posts.length : 0
+        });
+
+        if (error) throw error;
+        fetchedPosts = data || [];
+      }
+
+      // Check if there are more posts
+      if (!fetchedPosts || fetchedPosts.length < BATCH_SIZE) {
+        setHasMore(false);
+      }
+
+      // Fetch additional profile and interaction data for each post
+      const postsWithDetails = await Promise.all(
+        fetchedPosts.map(async (post) => {
+          const [profileData, likeData, saveData] = await Promise.all([
+            supabase
+              .from("profiles")
+              .select("username, display_name, avatar_url")
+              .eq("id", post.user_id)
+              .single(),
+            supabase
+              .from("post_likes")
+              .select("user_id")
+              .eq("post_id", post.id)
+              .eq("user_id", session.user.id)
+              .maybeSingle(),
+            supabase
+              .from("saved_posts")
+              .select("user_id")
+              .eq("post_id", post.id)
+              .eq("user_id", session.user.id)
+              .maybeSingle()
+          ]);
+
+          return {
+            ...post,
+            profile: profileData.data,
+            user_liked: !!likeData.data,
+            user_saved: !!saveData.data
+          };
+        })
+      );
+
+      if (cursor) {
+        setPosts((current) => [...current, ...postsWithDetails]);
+      } else {
+        setPosts(postsWithDetails);
+      }
+      
+      setLoading(false);
+      setLoadingMore(false);
+    } catch (error) {
       toast.error("Failed to load posts");
       if (import.meta.env.DEV) {
         console.error(error);
       }
       setLoading(false);
       setLoadingMore(false);
-      return;
     }
-
-    // Check if there are more posts
-    if (!postsData || postsData.length < BATCH_SIZE) {
-      setHasMore(false);
-    }
-
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (user && postsData) {
-      // Fetch user's likes and saved posts
-      const postIds = postsData.map((p: any) => p.id);
-      const [{ data: userLikes }, { data: userSaved }] = await Promise.all([
-        supabase
-          .from("post_likes")
-          .select("post_id")
-          .eq("user_id", user.id)
-          .in("post_id", postIds),
-        supabase
-          .from("saved_posts")
-          .select("post_id")
-          .eq("user_id", user.id)
-          .in("post_id", postIds)
-      ]);
-      
-      const likedPostIds = new Set(userLikes?.map(like => like.post_id) || []);
-      const savedPostIds = new Set(userSaved?.map(save => save.post_id) || []);
-      
-      // Add user_liked and user_saved flags to each post
-      const postsWithLikes = postsData.map((post: any) => ({
-        ...post,
-        user_liked: likedPostIds.has(post.id),
-        user_saved: savedPostIds.has(post.id),
-        profile: post.profiles
-      })) as Post[];
-      
-      if (cursor) {
-        setPosts((current) => [...current, ...postsWithLikes]);
-      } else {
-        setPosts(postsWithLikes);
-      }
-    } else {
-      const newPosts = (postsData || []).map((post: any) => ({
-        ...post,
-        user_liked: false,
-        user_saved: false,
-        profile: post.profiles
-      })) as Post[];
-      
-      if (cursor) {
-        setPosts((current) => [...current, ...newPosts]);
-      } else {
-        setPosts(newPosts);
-      }
-    }
-    
-    setLoading(false);
-    setLoadingMore(false);
   };
 
   const loadMore = async () => {
     if (loadingMore || !hasMore || posts.length === 0) return;
     
     setLoadingMore(true);
-    const lastPost = posts[posts.length - 1];
-    await fetchPosts(lastPost.created_at);
+    await fetchPosts("load-more");
   };
 
   const setupRealtimeSubscription = () => {
@@ -170,7 +197,9 @@ export const VerticalFeed = () => {
           table: "posts",
         },
         (payload) => {
-          setPosts((current) => [payload.new as Post, ...current]);
+          if (feedType === "for-you") {
+            setPosts((current) => [payload.new as Post, ...current]);
+          }
         }
       )
       .subscribe();
@@ -205,6 +234,14 @@ export const VerticalFeed = () => {
         user_id: user?.id || null,
         watch_duration: 0,
       });
+
+      // Update user interests based on this view
+      if (user?.id) {
+        await supabase.rpc("update_user_interests_from_interaction", {
+          p_user_id: user.id,
+          p_post_id: postId
+        });
+      }
     } catch (error) {
       // Silently fail - view tracking is not critical
       if (import.meta.env.DEV) {
@@ -346,58 +383,82 @@ export const VerticalFeed = () => {
     }, 5000);
   };
 
-  if (loading) {
+  if (loading && posts.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen flex-col items-center justify-center bg-background">
         <p className="text-muted-foreground">Loading feed...</p>
       </div>
     );
   }
 
-  if (posts.length === 0) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">No posts yet. Be the first to post!</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex justify-center bg-background">
-      <div
-        ref={containerRef}
-        className="h-screen w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide"
-        onScroll={handleScroll}
-      >
-        {posts.map((post, index) => (
-          <div
-            key={post.id}
-            ref={index === posts.length - 3 ? lastPostRef : null}
-          >
-            <FeedPost
-              id={post.id}
-              mediaUrl={post.media_url}
-              mediaType={post.media_type}
-              caption={post.caption}
-              likesCount={post.likes_count}
-              commentsCount={post.comments_count}
-              sharesCount={post.shares_count}
-              isSaved={post.user_saved || false}
-              isLiked={post.user_liked || false}
-              isActive={index === currentIndex}
-              onLike={() => handleLike(post.id)}
-              onSaveToggle={() => handleSaveToggle(post.id)}
-              onDelete={() => handleDeletePost(post.id)}
-              userId={post.user_id}
-              profile={post.profile}
-            />
-          </div>
-        ))}
-        {loadingMore && (
-          <div className="flex h-screen items-center justify-center">
-            <p className="text-muted-foreground">Loading more posts...</p>
-          </div>
-        )}
+    <div className="h-screen flex flex-col bg-background">
+      {/* Feed Type Tabs */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
+        <Tabs value={feedType} onValueChange={(value) => setFeedType(value as "for-you" | "following")} className="w-full">
+          <TabsList className="w-full grid grid-cols-2 h-12 rounded-none">
+            <TabsTrigger value="for-you" className="text-sm font-medium">
+              For You
+            </TabsTrigger>
+            <TabsTrigger value="following" className="text-sm font-medium">
+              Following
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Feed Content */}
+      <div className="flex flex-1 justify-center">
+        <div
+          ref={containerRef}
+          className="h-full w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide"
+          onScroll={handleScroll}
+        >
+          {posts.length === 0 ? (
+            <div className="flex h-full items-center justify-center p-8">
+              <div className="text-center">
+                <p className="text-muted-foreground mb-4">
+                  {feedType === "following" ? "No posts from people you follow" : "No posts yet"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {feedType === "following" ? "Follow some users to see their posts here" : "Be the first to share something!"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {posts.map((post, index) => (
+                <div
+                  key={post.id}
+                  ref={index === posts.length - 3 ? lastPostRef : null}
+                >
+                  <FeedPost
+                    id={post.id}
+                    mediaUrl={post.media_url}
+                    mediaType={post.media_type}
+                    caption={post.caption}
+                    likesCount={post.likes_count}
+                    commentsCount={post.comments_count}
+                    sharesCount={post.shares_count}
+                    isSaved={post.user_saved || false}
+                    isLiked={post.user_liked || false}
+                    isActive={index === currentIndex}
+                    onLike={() => handleLike(post.id)}
+                    onSaveToggle={() => handleSaveToggle(post.id)}
+                    onDelete={() => handleDeletePost(post.id)}
+                    userId={post.user_id}
+                    profile={post.profile}
+                  />
+                </div>
+              ))}
+              {loadingMore && (
+                <div className="flex h-screen items-center justify-center">
+                  <p className="text-muted-foreground">Loading more posts...</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
