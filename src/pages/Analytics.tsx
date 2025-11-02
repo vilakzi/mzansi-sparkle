@@ -17,7 +17,6 @@ type AnalyticsData = {
   totalShares: number;
   userGrowth: { date: string; count: number }[];
   topPosts: { id: string; caption: string; engagement: number; media_url: string }[];
-  categoryDistribution: { name: string; value: number }[];
   engagementTrend: { date: string; likes: number; comments: number; shares: number }[];
 };
 
@@ -100,9 +99,6 @@ const Analytics = () => {
         media_url: post.media_url,
       })) || [];
 
-      // Category distribution removed - feature no longer available
-      const categoryDistribution: any[] = [];
-
       // Fetch engagement trend (last 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -123,7 +119,6 @@ const Analytics = () => {
         totalShares: sharesCount.count || 0,
         userGrowth,
         topPosts,
-        categoryDistribution,
         engagementTrend,
       });
     } catch (error) {
@@ -254,10 +249,9 @@ const Analytics = () => {
 
             {/* Charts */}
             <Tabs defaultValue="engagement">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="engagement">Engagement</TabsTrigger>
                 <TabsTrigger value="growth">Growth</TabsTrigger>
-                <TabsTrigger value="categories">Categories</TabsTrigger>
                 <TabsTrigger value="top">Top Posts</TabsTrigger>
               </TabsList>
 
@@ -297,35 +291,6 @@ const Analytics = () => {
                         <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
                         <Bar dataKey="count" fill="#d946b8" />
                       </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="categories" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Posts by Category</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={analytics.categoryDistribution}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }: any) => `${name} ${((percent as number) * 100).toFixed(0)}%`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {analytics.categoryDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
-                      </PieChart>
                     </ResponsiveContainer>
                   </CardContent>
                 </Card>

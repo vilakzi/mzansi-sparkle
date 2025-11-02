@@ -22,8 +22,6 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Messages = lazy(() => import("./pages/Messages"));
 const Conversation = lazy(() => import("./pages/Conversation"));
-const Categories = lazy(() => import("./pages/Categories"));
-const Category = lazy(() => import("./pages/Category"));
 
 const queryClient = new QueryClient();
 
@@ -49,8 +47,6 @@ const App = () => (
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/messages/:conversationId" element={<Conversation />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/category/:name" element={<Category />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -72,19 +72,3 @@ export const PostDetailLoadingSkeleton = () => {
   );
 };
 
-export const CategoryLoadingSkeleton = () => {
-  return (
-    <div className="grid grid-cols-2 gap-4 p-4">
-      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-        <Card key={i}>
-          <CardHeader>
-            <Skeleton className="h-6 w-24" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-4 w-32" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-};
