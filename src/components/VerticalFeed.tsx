@@ -102,12 +102,17 @@ export const VerticalFeed = () => {
   }, [posts.length]);
 
   const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
+    // Only fetch profile if not already present (for backwards compatibility)
+    const profilePromise = post.profile 
+      ? Promise.resolve({ data: post.profile })
+      : supabase
+          .from("profiles")
+          .select("username, display_name, avatar_url")
+          .eq("id", post.user_id)
+          .single();
+
     const [profileData, likeData, saveData] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url")
-        .eq("id", post.user_id)
-        .single(),
+      profilePromise,
       supabase
         .from("post_likes")
         .select("user_id")
