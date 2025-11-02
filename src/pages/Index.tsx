@@ -63,7 +63,6 @@ const Index = () => {
       // Use simple feed function
       const { data: feedData, error } = await supabase.rpc('get_simple_feed', {
         p_user_id: session.user.id,
-        p_feed_type: 'for-you',
         p_limit: 10,
         p_offset: 0
       });

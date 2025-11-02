@@ -2,11 +2,9 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
 import { toast } from "sonner";
-import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 import { RefreshCw, ArrowUp } from "lucide-react";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 
 interface Post {
   id: string;
@@ -38,7 +36,6 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   const [loading, setLoading] = useState(initialPosts.length === 0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [feedType, setFeedType] = useState<"for-you" | "following">("for-you");
   const [userId, setUserId] = useState<string | null>(null);
   const [newPostsCount, setNewPostsCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,15 +72,6 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     }
   }, [userId]);
 
-  useEffect(() => {
-    if (userId && initialPosts.length === 0) {
-      setPosts([]);
-      setHasMore(true);
-      setLoading(true);
-      trackedPostsRef.current.clear(); // Clear tracking cache on feed change
-      fetchPosts();
-    }
-  }, [feedType, userId]);
 
   useEffect(() => {
     // Setup intersection observer for infinite scroll - trigger earlier
@@ -144,7 +132,6 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       // Use simple feed function
       const { data: feedData, error } = await supabase.rpc("get_simple_feed", {
         p_user_id: session.user.id,
-        p_feed_type: feedType,
         p_limit: BATCH_SIZE,
         p_offset: offset,
       });
@@ -182,7 +169,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       setLoadingMore(false);
       setIsRefreshing(false);
     } catch (error: any) {
-      console.error(`Feed fetch error (${feedType}):`, error);
+      console.error('Feed fetch error:', error);
       toast.error("Failed to load posts");
       
       setLoading(false);
@@ -414,34 +401,17 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Feed Type Tabs */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
-        <div className="relative">
-          <Tabs value={feedType} onValueChange={(value) => setFeedType(value as "for-you" | "following")} className="w-full">
-            <TabsList className="w-full grid grid-cols-2 h-12 rounded-none">
-              <TabsTrigger value="for-you" className="text-sm font-medium relative">
-                For You
-                {newPostsCount > 0 && feedType === "for-you" && (
-                  <Badge variant="destructive" className="ml-2 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
-                    {newPostsCount}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="following" className="text-sm font-medium">
-                Following
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          
-          {/* Refresh Button */}
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
+        <div className="flex items-center justify-between px-4 py-3">
+          <h1 className="text-xl font-bold">Feed</h1>
           <Button
             variant="ghost"
             size="icon"
-            className="absolute right-2 top-1/2 -translate-y-1/2"
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
         
@@ -462,7 +432,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             </Button>
           </div>
         )}
-      </div>
+      </header>
 
       {/* Feed Content */}
       <div className="flex flex-1 justify-center relative">
@@ -476,10 +446,10 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             <div className="flex h-full items-center justify-center p-8">
               <div className="text-center space-y-4">
                 <p className="text-muted-foreground mb-4">
-                  {feedType === "following" ? "No posts from people you follow" : "No posts yet"}
+                  No posts yet
                 </p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {feedType === "following" ? "Follow some users to see their posts here" : "Discover amazing content"}
+                  Discover amazing content
                 </p>
                 <Button onClick={handleRefresh} variant="outline">
                   <RefreshCw className="h-4 w-4 mr-2" />
