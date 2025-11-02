@@ -18,13 +18,14 @@ interface Post {
   shares_count: number;
   created_at: string;
   user_id: string;
-  user_liked?: boolean;
-  user_saved?: boolean;
-  profile?: {
-    display_name: string;
-    username: string;
-    avatar_url: string | null;
-  };
+  is_liked?: boolean;
+  is_saved?: boolean;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  bio?: string;
+  followers_count?: number;
+  following_count?: number;
 }
 
 type VerticalFeedProps = {
@@ -138,8 +139,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       const BATCH_SIZE = 10;
       const offset = cursor ? posts.length : 0;
 
-      // Use optimized RPC that returns everything in one query
-      const { data: feedData, error } = await supabase.rpc("get_complete_feed_data", {
+      // Use simple feed function
+      const { data: feedData, error } = await supabase.rpc("get_simple_feed", {
         p_user_id: session.user.id,
         p_feed_type: feedType,
         p_limit: BATCH_SIZE,
@@ -148,9 +149,10 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
       if (error) throw error;
 
-      // Parse JSON response
-      const parsedData = feedData as { posts?: any[] } | null;
-      const fetchedPosts = parsedData?.posts || [];
+      const fetchedPosts = (feedData || []).map(post => ({
+        ...post,
+        media_type: post.media_type as "image" | "video"
+      }));
 
       if (isRefresh) {
         setPosts(fetchedPosts);
@@ -248,10 +250,10 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Simplified tracking - just record the view
       await supabase.from("post_views").insert({
         post_id: postId,
         user_id: user?.id || null,
-        watch_duration: 0,
       });
     } catch (error) {
       // Silently fail - view tracking is not critical
@@ -280,7 +282,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       setPosts((current) =>
         current.map((post) =>
           post.id === postId
-            ? { ...post, likes_count: new_count, user_liked: liked }
+            ? { ...post, likes_count: new_count, is_liked: liked }
             : post
         )
       );
@@ -298,7 +300,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     if (!post) return;
 
     try {
-      if (post.user_saved) {
+      if (post.is_saved) {
         // Unsave
         const { error } = await supabase
           .from("saved_posts")
@@ -320,7 +322,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
       setPosts((current) =>
         current.map((p) =>
-          p.id === postId ? { ...p, user_saved: !p.user_saved } : p
+          p.id === postId ? { ...p, is_saved: !p.is_saved } : p
         )
       );
     } catch (error: any) {
@@ -498,8 +500,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
                       likesCount={post.likes_count}
                       commentsCount={post.comments_count}
                       sharesCount={post.shares_count}
-                      isSaved={post.user_saved || false}
-                      isLiked={post.user_liked || false}
+                      isSaved={post.is_saved || false}
+                      isLiked={post.is_liked || false}
                       isActive={index === currentIndex}
                       isPrevious={index === currentIndex - 1}
                       isNext={index === currentIndex + 1}
@@ -511,8 +513,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
                       onLike={() => handleLike(post.id)}
                       onSaveToggle={() => handleSaveToggle(post.id)}
                       onDelete={() => handleDeletePost(post.id)}
+                      profile={{ 
+                        display_name: post.display_name, 
+                        username: post.username, 
+                        avatar_url: post.avatar_url 
+                      }}
                       userId={post.user_id}
-                      profile={post.profile}
                     />
                   </div>
                 );

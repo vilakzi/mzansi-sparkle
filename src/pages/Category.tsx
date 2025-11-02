@@ -38,45 +38,12 @@ const Category = () => {
   const fetchCategoryPosts = async (categoryName: string) => {
     try {
       setLoading(true);
-
-      // First get category info
-      const { data: categoryData, error: categoryError } = await supabase
-        .from("post_categories")
-        .select("*")
-        .eq("name", categoryName)
-        .single();
-
-      if (categoryError) throw categoryError;
-      setCategoryInfo(categoryData);
-
-      // Get post IDs for this category
-      const { data: mappings, error: mappingsError } = await supabase
-        .from("post_category_mappings")
-        .select("post_id")
-        .eq("category_id", categoryData.id);
-
-      if (mappingsError) throw mappingsError;
-
-      if (!mappings || mappings.length === 0) {
-        setPosts([]);
-        setLoading(false);
-        return;
-      }
-
-      const postIds = mappings.map((m) => m.post_id);
-
-      // Fetch posts
-      const { data: postsData, error: postsError } = await supabase
-        .from("posts")
-        .select("id, media_url, media_type, caption, likes_count, comments_count")
-        .in("id", postIds)
-        .order("created_at", { ascending: false });
-
-      if (postsError) throw postsError;
-      setPosts(postsData || []);
+      // Category feature removed - redirect to trending
+      toast.info("Categories feature is no longer available");
+      navigate("/trending");
     } catch (error) {
-      console.error("Error fetching category posts:", error);
-      toast.error("Failed to load category posts");
+      console.error("Error:", error);
+      navigate("/trending");
     } finally {
       setLoading(false);
     }

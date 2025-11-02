@@ -56,13 +56,8 @@ const Categories = () => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("post_categories")
-        .select("*")
-        .order("posts_count", { ascending: false });
-
-      if (error) throw error;
-      setCategories(data || []);
+      // Categories feature removed - show empty state
+      setCategories([]);
     } catch (error) {
       console.error("Error fetching categories:", error);
       toast.error("Failed to load categories");
