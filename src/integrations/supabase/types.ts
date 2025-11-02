@@ -891,6 +891,15 @@ export type Database = {
         Args: { p_caption: string; p_post_id: string }
         Returns: undefined
       }
+      get_complete_feed_data: {
+        Args: {
+          p_feed_type?: string
+          p_limit?: number
+          p_offset?: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       get_enhanced_engagement_posts: {
         Args: never
         Returns: {

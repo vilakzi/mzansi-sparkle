@@ -114,49 +114,13 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     }
   }, [posts.length]);
 
-  const enrichPostsWithDetails = useCallback(async (postsToEnrich: any[], session: any) => {
-    if (postsToEnrich.length === 0) return [];
-
-    // Batch fetch all profiles needed
-    const missingProfileIds = postsToEnrich
-      .filter(p => !p.profile && !profileCacheRef.current.has(p.user_id))
-      .map(p => p.user_id);
-
-    if (missingProfileIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, username, display_name, avatar_url")
-        .in("id", missingProfileIds);
-
-      profiles?.forEach(profile => {
-        profileCacheRef.current.set(profile.id, profile);
-      });
-    }
-
-    // Use batch enrichment function for likes and saves
-    const postIds = postsToEnrich.map(p => p.id);
-    const { data: enrichmentData } = await supabase.rpc('get_enriched_posts', {
-      p_user_id: session?.user?.id || null,
-      p_post_ids: postIds
-    });
-
-    // Map enrichment data by post_id for quick lookup
-    const enrichmentMap = new Map(
-      enrichmentData?.map(item => [item.post_id, item]) || []
-    );
-
-    return postsToEnrich.map(post => {
-      const profile = post.profile || profileCacheRef.current.get(post.user_id);
-      const enrichment = enrichmentMap.get(post.id);
-
-      return {
-        ...post,
-        profile,
-        user_liked: enrichment?.user_liked || false,
-        user_saved: enrichment?.user_saved || false
-      };
-    });
-  }, []);
+  // Windowing: render only visible posts + buffer for performance
+  const WINDOW_SIZE = 7; // Render current + 3 before + 3 after
+  const visiblePosts = posts.slice(
+    Math.max(0, currentIndex - 3),
+    Math.min(posts.length, currentIndex + 4)
+  );
+  const windowOffset = Math.max(0, currentIndex - 3);
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -176,93 +140,33 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         return;
       }
 
-      const BATCH_SIZE = 15; // Reduced for faster initial load
+      const BATCH_SIZE = 15;
       const offset = cursor ? posts.length : 0;
 
-      let fetchedPosts: any[] = [];
-      let error: any = null;
-
-      if (feedType === "for-you") {
-        // Use smart shuffle feed for discovery
-        const { data, error: rpcError } = await supabase.rpc("get_shuffled_feed", {
-          p_user_id: session.user.id,
-          p_limit: BATCH_SIZE,
-          p_offset: offset,
-        });
-
-        if (rpcError) {
-          error = rpcError;
-        } else {
-          // Fetch profiles separately since RPC doesn't support joins
-          const userIds = [...new Set(data?.map((p: any) => p.user_id) || [])];
-          const { data: profilesData } = await supabase
-            .from("profiles")
-            .select("id, username, display_name, avatar_url")
-            .in("id", userIds);
-
-          // Merge profiles into posts
-          fetchedPosts = (data || []).map((post: any) => ({
-            ...post,
-            profile: profilesData?.find((p) => p.id === post.user_id),
-          }));
-        }
-      } else {
-        // Following feed: chronological order
-        const { data: followingData } = await supabase
-          .from("follows")
-          .select("following_id")
-          .eq("follower_id", session.user.id);
-
-        const followingIds = followingData?.map((f) => f.following_id) || [];
-
-        if (followingIds.length === 0) {
-          setPosts([]);
-          setHasMore(false);
-          setLoading(false);
-          setLoadingMore(false);
-          setIsRefreshing(false);
-          return;
-        }
-
-        const { data, error: queryError } = await supabase
-          .from("posts")
-          .select(
-            `
-            *,
-            profile:profiles!posts_user_id_fkey(
-              id,
-              username,
-              display_name,
-              avatar_url
-            )
-          `
-          )
-          .in("user_id", followingIds)
-          .order("created_at", { ascending: false })
-          .range(offset, offset + BATCH_SIZE - 1);
-
-        if (queryError) {
-          error = queryError;
-        } else {
-          fetchedPosts = data || [];
-        }
-      }
+      // Use optimized RPC that returns everything in one query
+      const { data: feedData, error } = await supabase.rpc("get_complete_feed_data", {
+        p_user_id: session.user.id,
+        p_feed_type: feedType,
+        p_limit: BATCH_SIZE,
+        p_offset: offset,
+      });
 
       if (error) throw error;
 
-      // Enrich posts with user interaction data using batch function
-      const postsWithDetails = await enrichPostsWithDetails(fetchedPosts || [], session);
+      // Parse JSON response
+      const parsedData = feedData as { posts?: any[] } | null;
+      const fetchedPosts = parsedData?.posts || [];
 
       if (isRefresh) {
-        setPosts(postsWithDetails);
+        setPosts(fetchedPosts);
         setNewPostsCount(0);
       } else if (cursor) {
-        setPosts((current) => [...current, ...postsWithDetails]);
+        setPosts((current) => [...current, ...fetchedPosts]);
       } else {
-        setPosts(postsWithDetails);
+        setPosts(fetchedPosts);
       }
 
-      setHasMore((fetchedPosts || []).length === BATCH_SIZE);
+      setHasMore(fetchedPosts.length === BATCH_SIZE);
       
       setLoading(false);
       setLoadingMore(false);
@@ -305,20 +209,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           table: "posts",
         },
         async (payload) => {
-          // Notify about new posts instead of auto-adding
+          // Notify about new posts
           setNewPostsCount((prev) => prev + 1);
-          
-          // Auto-add if user is at the top
-          if (containerRef.current && containerRef.current.scrollTop < 100) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-              const enrichedPosts = await enrichPostsWithDetails([payload.new], session);
-              if (enrichedPosts.length > 0) {
-                setPosts((current) => [enrichedPosts[0], ...current]);
-                setNewPostsCount(0);
-              }
-            }
-          }
         }
       )
       .subscribe();
@@ -585,31 +477,45 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             </div>
           ) : (
             <>
-              {posts.map((post, index) => (
-                <div
-                  key={`${post.id}-${index}`}
-                  ref={index === posts.length - 5 ? lastPostRef : null}
-                  className="snap-start snap-always"
-                >
-                  <FeedPost
-                    id={post.id}
-                    mediaUrl={post.media_url}
-                    mediaType={post.media_type}
-                    caption={post.caption}
-                    likesCount={post.likes_count}
-                    commentsCount={post.comments_count}
-                    sharesCount={post.shares_count}
-                    isSaved={post.user_saved || false}
-                    isLiked={post.user_liked || false}
-                    isActive={index === currentIndex}
-                    onLike={() => handleLike(post.id)}
-                    onSaveToggle={() => handleSaveToggle(post.id)}
-                    onDelete={() => handleDeletePost(post.id)}
-                    userId={post.user_id}
-                    profile={post.profile}
-                  />
-                </div>
-              ))}
+              {/* Spacer for windowed posts */}
+              {windowOffset > 0 && (
+                <div style={{ height: `${windowOffset * window.innerHeight}px` }} />
+              )}
+              
+              {/* Render only visible posts + buffer */}
+              {visiblePosts.map((post, visibleIndex) => {
+                const actualIndex = windowOffset + visibleIndex;
+                return (
+                  <div
+                    key={`${post.id}-${actualIndex}`}
+                    ref={actualIndex === posts.length - 5 ? lastPostRef : null}
+                    className="snap-start snap-always"
+                  >
+                    <FeedPost
+                      id={post.id}
+                      mediaUrl={post.media_url}
+                      mediaType={post.media_type}
+                      caption={post.caption}
+                      likesCount={post.likes_count}
+                      commentsCount={post.comments_count}
+                      sharesCount={post.shares_count}
+                      isSaved={post.user_saved || false}
+                      isLiked={post.user_liked || false}
+                      isActive={actualIndex === currentIndex}
+                      onLike={() => handleLike(post.id)}
+                      onSaveToggle={() => handleSaveToggle(post.id)}
+                      onDelete={() => handleDeletePost(post.id)}
+                      userId={post.user_id}
+                      profile={post.profile}
+                    />
+                  </div>
+                );
+              })}
+              
+              {/* Spacer for posts after window */}
+              {windowOffset + visiblePosts.length < posts.length && (
+                <div style={{ height: `${(posts.length - windowOffset - visiblePosts.length) * window.innerHeight}px` }} />
+              )}
               {loadingMore && (
                 <div className="flex h-screen items-center justify-center snap-start">
                   <div className="text-center space-y-4">
