@@ -1,9 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
+import { RefreshCw, ArrowUp } from "lucide-react";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 
 interface Post {
   id: string;
@@ -32,9 +35,13 @@ export const VerticalFeed = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [feedType, setFeedType] = useState<"for-you" | "following">("for-you");
   const [userId, setUserId] = useState<string | null>(null);
+  const [newPostsCount, setNewPostsCount] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [seenPostIds, setSeenPostIds] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -64,10 +71,10 @@ export const VerticalFeed = () => {
   }, [feedType, userId]);
 
   useEffect(() => {
-    // Setup intersection observer for infinite scroll
+    // Setup intersection observer for infinite scroll - trigger earlier
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+        if (entries[0].isIntersecting && !loadingMore && !loading) {
           loadMore();
         }
       },
@@ -83,11 +90,42 @@ export const VerticalFeed = () => {
         observerRef.current.disconnect();
       }
     };
-  }, [hasMore, loadingMore, loading, posts.length]);
+  }, [loadingMore, loading, posts.length]);
 
-  const fetchPosts = async (cursor?: string) => {
+  const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
+    const [profileData, likeData, saveData] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("username, display_name, avatar_url")
+        .eq("id", post.user_id)
+        .single(),
+      supabase
+        .from("post_likes")
+        .select("user_id")
+        .eq("post_id", post.id)
+        .eq("user_id", session.user.id)
+        .maybeSingle(),
+      supabase
+        .from("saved_posts")
+        .select("user_id")
+        .eq("post_id", post.id)
+        .eq("user_id", session.user.id)
+        .maybeSingle()
+    ]);
+
+    return {
+      ...post,
+      profile: profileData.data,
+      user_liked: !!likeData.data,
+      user_saved: !!saveData.data
+    };
+  }, []);
+
+  const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
-      if (cursor) {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else if (cursor) {
         setLoadingMore(true);
       } else {
         setLoading(true);
@@ -97,14 +135,14 @@ export const VerticalFeed = () => {
       if (!session?.user) {
         setLoading(false);
         setLoadingMore(false);
+        setIsRefreshing(false);
         return;
       }
 
-      const BATCH_SIZE = 15;
+      const BATCH_SIZE = 20;
       let fetchedPosts: any[] = [];
 
       if (feedType === "following") {
-        // Use the following feed function
         const { data, error } = await supabase.rpc("get_following_feed", {
           p_user_id: session.user.id,
           p_limit: BATCH_SIZE,
@@ -114,8 +152,8 @@ export const VerticalFeed = () => {
         if (error) throw error;
         fetchedPosts = data || [];
       } else {
-        // Use the personalized feed function
-        const { data, error } = await supabase.rpc("get_personalized_feed", {
+        // Use mixed feed for better content diversity
+        const { data, error } = await supabase.rpc("get_mixed_feed", {
           p_user_id: session.user.id,
           p_limit: BATCH_SIZE,
           p_offset: cursor ? posts.length : 0
@@ -125,51 +163,36 @@ export const VerticalFeed = () => {
         fetchedPosts = data || [];
       }
 
-      // Check if there are more posts
-      if (!fetchedPosts || fetchedPosts.length < BATCH_SIZE) {
-        setHasMore(false);
+      // Filter out posts we've already seen (unless refreshing)
+      if (!isRefresh) {
+        fetchedPosts = fetchedPosts.filter(p => !seenPostIds.has(p.id));
       }
 
-      // Fetch additional profile and interaction data for each post
+      // Enrich posts with details
       const postsWithDetails = await Promise.all(
-        fetchedPosts.map(async (post) => {
-          const [profileData, likeData, saveData] = await Promise.all([
-            supabase
-              .from("profiles")
-              .select("username, display_name, avatar_url")
-              .eq("id", post.user_id)
-              .single(),
-            supabase
-              .from("post_likes")
-              .select("user_id")
-              .eq("post_id", post.id)
-              .eq("user_id", session.user.id)
-              .maybeSingle(),
-            supabase
-              .from("saved_posts")
-              .select("user_id")
-              .eq("post_id", post.id)
-              .eq("user_id", session.user.id)
-              .maybeSingle()
-          ]);
-
-          return {
-            ...post,
-            profile: profileData.data,
-            user_liked: !!likeData.data,
-            user_saved: !!saveData.data
-          };
-        })
+        fetchedPosts.map((post) => enrichPostWithDetails(post, session))
       );
 
-      if (cursor) {
+      // Track seen posts
+      const newSeenIds = new Set(seenPostIds);
+      postsWithDetails.forEach(p => newSeenIds.add(p.id));
+      setSeenPostIds(newSeenIds);
+
+      if (isRefresh) {
+        setPosts(postsWithDetails);
+        setNewPostsCount(0);
+      } else if (cursor) {
         setPosts((current) => [...current, ...postsWithDetails]);
       } else {
         setPosts(postsWithDetails);
       }
+
+      // Always set hasMore to true to enable infinite scrolling
+      setHasMore(true);
       
       setLoading(false);
       setLoadingMore(false);
+      setIsRefreshing(false);
     } catch (error) {
       toast.error("Failed to load posts");
       if (import.meta.env.DEV) {
@@ -177,14 +200,36 @@ export const VerticalFeed = () => {
       }
       setLoading(false);
       setLoadingMore(false);
+      setIsRefreshing(false);
     }
   };
 
   const loadMore = async () => {
-    if (loadingMore || !hasMore || posts.length === 0) return;
+    if (loadingMore || posts.length === 0) return;
     
-    setLoadingMore(true);
-    await fetchPosts("load-more");
+    // When reaching end, recycle content with fresh recommendations
+    if (posts.length > 0) {
+      setLoadingMore(true);
+      
+      // Clear seen posts periodically to allow content recycling
+      if (seenPostIds.size > 100) {
+        setSeenPostIds(new Set());
+      }
+      
+      await fetchPosts("load-more");
+    }
+  };
+
+  const handleRefresh = async () => {
+    setSeenPostIds(new Set()); // Clear seen posts
+    await fetchPosts(undefined, true);
+    toast.success("Feed refreshed");
+  };
+
+  const scrollToTop = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const setupRealtimeSubscription = () => {
@@ -197,9 +242,18 @@ export const VerticalFeed = () => {
           schema: "public",
           table: "posts",
         },
-        (payload) => {
-          if (feedType === "for-you") {
-            setPosts((current) => [payload.new as Post, ...current]);
+        async (payload) => {
+          // Notify about new posts instead of auto-adding
+          setNewPostsCount((prev) => prev + 1);
+          
+          // Auto-add if user is at the top
+          if (containerRef.current && containerRef.current.scrollTop < 100) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              const enrichedPost = await enrichPostWithDetails(payload.new, session);
+              setPosts((current) => [enrichedPost, ...current]);
+              setNewPostsCount(0);
+            }
           }
         }
       )
@@ -210,21 +264,30 @@ export const VerticalFeed = () => {
     };
   };
 
-  const handleScroll = () => {
+  const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     
-    const scrollTop = containerRef.current.scrollTop;
-    const index = Math.round(scrollTop / window.innerHeight);
-    
-    if (index !== currentIndex) {
-      setCurrentIndex(index);
-      
-      // Track view when user scrolls to a new post
-      if (posts[index]) {
-        trackView(posts[index].id);
-      }
+    // Debounce scroll handling for better performance
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
-  };
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (!containerRef.current) return;
+      
+      const scrollTop = containerRef.current.scrollTop;
+      const index = Math.round(scrollTop / window.innerHeight);
+      
+      if (index !== currentIndex && index >= 0 && index < posts.length) {
+        setCurrentIndex(index);
+        
+        // Track view when user scrolls to a new post
+        if (posts[index]) {
+          trackView(posts[index].id);
+        }
+      }
+    }, 100);
+  }, [currentIndex, posts]);
 
   const trackView = async (postId: string) => {
     try {
@@ -392,42 +455,84 @@ export const VerticalFeed = () => {
     <div className="h-screen flex flex-col bg-background">
       {/* Feed Type Tabs */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
-        <Tabs value={feedType} onValueChange={(value) => setFeedType(value as "for-you" | "following")} className="w-full">
-          <TabsList className="w-full grid grid-cols-2 h-12 rounded-none">
-            <TabsTrigger value="for-you" className="text-sm font-medium">
-              For You
-            </TabsTrigger>
-            <TabsTrigger value="following" className="text-sm font-medium">
-              Following
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="relative">
+          <Tabs value={feedType} onValueChange={(value) => setFeedType(value as "for-you" | "following")} className="w-full">
+            <TabsList className="w-full grid grid-cols-2 h-12 rounded-none">
+              <TabsTrigger value="for-you" className="text-sm font-medium relative">
+                For You
+                {newPostsCount > 0 && feedType === "for-you" && (
+                  <Badge variant="destructive" className="ml-2 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
+                    {newPostsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="following" className="text-sm font-medium">
+                Following
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          {/* Refresh Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-1/2 -translate-y-1/2"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+        
+        {/* New Posts Banner */}
+        {newPostsCount > 0 && currentIndex > 0 && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 z-20 mt-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shadow-lg"
+              onClick={() => {
+                scrollToTop();
+                setNewPostsCount(0);
+              }}
+            >
+              <ArrowUp className="h-4 w-4 mr-1" />
+              {newPostsCount} new {newPostsCount === 1 ? 'post' : 'posts'}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Feed Content */}
-      <div className="flex flex-1 justify-center">
+      <div className="flex flex-1 justify-center relative">
         <div
           ref={containerRef}
-          className="h-full w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide"
+          className="h-full w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide scroll-smooth"
           onScroll={handleScroll}
+          style={{ scrollSnapType: 'y mandatory' }}
         >
           {posts.length === 0 ? (
             <div className="flex h-full items-center justify-center p-8">
-              <div className="text-center">
+              <div className="text-center space-y-4">
                 <p className="text-muted-foreground mb-4">
                   {feedType === "following" ? "No posts from people you follow" : "No posts yet"}
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  {feedType === "following" ? "Follow some users to see their posts here" : "Be the first to share something!"}
+                <p className="text-sm text-muted-foreground mb-4">
+                  {feedType === "following" ? "Follow some users to see their posts here" : "Discover amazing content"}
                 </p>
+                <Button onClick={handleRefresh} variant="outline">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Feed
+                </Button>
               </div>
             </div>
           ) : (
             <>
               {posts.map((post, index) => (
                 <div
-                  key={post.id}
-                  ref={index === posts.length - 3 ? lastPostRef : null}
+                  key={`${post.id}-${index}`}
+                  ref={index === posts.length - 5 ? lastPostRef : null}
+                  className="snap-start snap-always"
                 >
                   <FeedPost
                     id={post.id}
@@ -449,8 +554,11 @@ export const VerticalFeed = () => {
                 </div>
               ))}
               {loadingMore && (
-                <div className="flex h-screen items-center justify-center">
-                  <p className="text-muted-foreground">Loading more posts...</p>
+                <div className="flex h-screen items-center justify-center snap-start">
+                  <div className="text-center space-y-4">
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="text-muted-foreground">Loading more amazing content...</p>
+                  </div>
                 </div>
               )}
             </>

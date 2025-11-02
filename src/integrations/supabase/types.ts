@@ -922,6 +922,22 @@ export type Database = {
           views_count: number
         }[]
       }
+      get_mixed_feed: {
+        Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+        Returns: {
+          caption: string
+          comments_count: number
+          created_at: string
+          id: string
+          likes_count: number
+          media_type: string
+          media_url: string
+          saves_count: number
+          shares_count: number
+          user_id: string
+          views_count: number
+        }[]
+      }
       get_or_create_conversation: {
         Args: { p_other_user_id: string }
         Returns: string
