@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, ImagePlus } from "lucide-react";
+import { ArrowLeft, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -15,8 +15,6 @@ interface Message {
   content: string;
   sender_id: string;
   created_at: string;
-  media_url: string | null;
-  media_type: string | null;
 }
 
 interface OtherUser {
