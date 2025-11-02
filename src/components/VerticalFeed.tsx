@@ -502,6 +502,13 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
                       isSaved={post.user_saved || false}
                       isLiked={post.user_liked || false}
                       isActive={actualIndex === currentIndex}
+                      isPrevious={actualIndex === currentIndex - 1}
+                      isNext={actualIndex === currentIndex + 1}
+                      nextVideoUrl={
+                        actualIndex === currentIndex && posts[actualIndex + 1]?.media_type === 'video'
+                          ? posts[actualIndex + 1]?.media_url
+                          : undefined
+                      }
                       onLike={() => handleLike(post.id)}
                       onSaveToggle={() => handleSaveToggle(post.id)}
                       onDelete={() => handleDeletePost(post.id)}

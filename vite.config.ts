@@ -95,18 +95,32 @@ export default defineConfig(({ mode }) => ({
             }
           },
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/.*/i,
+            // Aggressive video caching with range request support
+            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/.*\.(mp4|webm|mov|avi)$/i,
             handler: "CacheFirst",
             options: {
-              cacheName: "media-cache",
+              cacheName: "video-cache",
               expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
               },
               cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
+                statuses: [0, 200, 206], // Support range requests (206)
+              },
+              rangeRequests: true,
+            },
+          },
+          {
+            // Aggressive image caching
+            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/.*\.(jpg|jpeg|png|webp|gif)$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "image-cache",
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
           },
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,

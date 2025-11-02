@@ -28,6 +28,9 @@ interface FeedPostProps {
   isSaved: boolean;
   isLiked: boolean;
   isActive: boolean;
+  isPrevious?: boolean;
+  isNext?: boolean;
+  nextVideoUrl?: string;
   onLike: () => void;
   onSaveToggle: () => void;
   onDelete?: () => void;
@@ -50,6 +53,9 @@ const FeedPostComponent = ({
   isSaved,
   isLiked,
   isActive,
+  isPrevious = false,
+  isNext = false,
+  nextVideoUrl,
   onLike,
   onSaveToggle,
   onDelete,
@@ -82,6 +88,26 @@ const FeedPostComponent = ({
     };
     getCurrentUser();
   }, []);
+
+  // Prefetch next video when current video is 50% watched
+  useEffect(() => {
+    if (mediaType === "video" && isPlaying && progress > 50 && nextVideoUrl && isActive) {
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.as = 'video';
+      link.href = nextVideoUrl;
+      link.type = 'video/mp4';
+      document.head.appendChild(link);
+      
+      return () => {
+        try {
+          document.head.removeChild(link);
+        } catch (e) {
+          // Link may have already been removed
+        }
+      };
+    }
+  }, [isPlaying, progress, nextVideoUrl, isActive, mediaType]);
 
   // Handle video play/pause based on isActive state
   useEffect(() => {
@@ -318,7 +344,7 @@ const FeedPostComponent = ({
             loop
             playsInline
             muted={isMuted}
-            preload="metadata"
+            preload={isActive || isPrevious || isNext ? "auto" : "metadata"}
           />
 
           {/* Play/Pause indicator */}
