@@ -15,6 +15,7 @@ import Notifications from "./pages/Notifications";
 import PostDetail from "./pages/PostDetail";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import Messages from "./pages/Messages";
 import Conversation from "./pages/Conversation";
@@ -40,7 +41,8 @@ const App = () => (
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/post/:id" element={<PostDetail />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/admin" element={<Admin />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/analytics" element={<Analytics />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/messages/:conversationId" element={<Conversation />} />
           <Route path="/categories" element={<Categories />} />

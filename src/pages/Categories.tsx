@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChevronLeft } from "lucide-react";
 import { BottomNav } from "@/components/BottomNav";
+import { CategoryLoadingSkeleton } from "@/components/LoadingSkeleton";
+import { toast } from "sonner";
 
 type Category = {
   id: string;
@@ -63,6 +65,7 @@ const Categories = () => {
       setCategories(data || []);
     } catch (error) {
       console.error("Error fetching categories:", error);
+      toast.error("Failed to load categories");
     } finally {
       setLoading(false);
     }
@@ -73,11 +76,7 @@ const Categories = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading categories...</div>
-      </div>
-    );
+    return <CategoryLoadingSkeleton />;
   }
 
   return (

@@ -11,6 +11,7 @@ import { FeedPost } from "@/components/FeedPost";
 import { ReportDialog } from "@/components/ReportDialog";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { ProfileLoadingSkeleton } from "@/components/LoadingSkeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -221,11 +222,7 @@ const Profile = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
+    return <ProfileLoadingSkeleton />;
   }
 
   if (!profile) {

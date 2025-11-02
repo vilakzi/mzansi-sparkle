@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 
 interface Post {
   id: string;
@@ -384,11 +385,7 @@ export const VerticalFeed = () => {
   };
 
   if (loading && posts.length === 0) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center bg-background">
-        <p className="text-muted-foreground">Loading feed...</p>
-      </div>
-    );
+    return <FeedLoadingSkeleton />;
   }
 
   return (
