@@ -47,6 +47,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const profileCacheRef = useRef<Map<string, any>>(new Map());
+  const trackedPostsRef = useRef<Set<string>>(new Set()); // Dedupe tracking
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -79,6 +80,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       setPosts([]);
       setHasMore(true);
       setLoading(true);
+      trackedPostsRef.current.clear(); // Clear tracking cache on feed change
       fetchPosts();
     }
   }, [feedType, userId]);
@@ -231,7 +233,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     
-    // Debounce scroll handling for better performance
+    // Debounce scroll handling - increased delay for better performance
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
@@ -249,32 +251,28 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
         
-        // Track view when user scrolls to a new post
+        // Track view - fire-and-forget
         if (posts[index]) {
           trackView(posts[index].id);
         }
       }
-    }, 100);
+    }, 200); // Increased from 100ms to 200ms for less overhead
   }, [currentIndex, posts]);
 
-  const trackView = async (postId: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Non-blocking tracking - don't wait for response
-      queueMicrotask(async () => {
-        try {
-          await supabase.from("post_views").insert({
-            post_id: postId,
-            user_id: user?.id || null,
-          });
-        } catch (err) {
-          // Silently fail
-        }
+  const trackView = (postId: string) => {
+    // Dedupe: Don't track same post multiple times
+    if (trackedPostsRef.current.has(postId)) return;
+    trackedPostsRef.current.add(postId);
+    
+    // Fire-and-forget: completely non-blocking tracking
+    setTimeout(() => {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        void supabase.from("post_views").insert({
+          post_id: postId,
+          user_id: user?.id || null,
+        });
       });
-    } catch (error) {
-      // Silently fail - view tracking is not critical
-    }
+    }, 0);
   };
 
   const handleLike = async (postId: string) => {
