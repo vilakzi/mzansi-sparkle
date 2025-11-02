@@ -871,6 +871,8 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: undefined
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       toggle_follow: {
         Args: { p_following_id: string }
         Returns: {
