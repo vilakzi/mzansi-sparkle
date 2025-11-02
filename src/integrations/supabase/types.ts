@@ -814,6 +814,48 @@ export type Database = {
           },
         ]
       }
+      upload_sessions: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number
+          file_type: string
+          id: string
+          status: string
+          storage_path: string | null
+          total_chunks: number
+          updated_at: string
+          uploaded_chunks: number[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size: number
+          file_type: string
+          id?: string
+          status?: string
+          storage_path?: string | null
+          total_chunks: number
+          updated_at?: string
+          uploaded_chunks?: number[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          status?: string
+          storage_path?: string | null
+          total_chunks?: number
+          updated_at?: string
+          uploaded_chunks?: number[] | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_interests: {
         Row: {
           created_at: string | null
