@@ -37,7 +37,6 @@ export const VerticalFeed = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [newPostsCount, setNewPostsCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [seenPostIds, setSeenPostIds] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
@@ -140,49 +139,52 @@ export const VerticalFeed = () => {
       }
 
       const BATCH_SIZE = 20;
-      let fetchedPosts: any[] = [];
+      const offset = cursor ? posts.length : 0;
 
+      // Simple query: just fetch posts ordered by created_at
+      let query = supabase
+        .from("posts")
+        .select(`
+          *,
+          profiles:user_id (
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + BATCH_SIZE - 1);
+
+      // If "following" feed, filter by followed users
       if (feedType === "following") {
-        const { data, error } = await supabase.rpc("get_following_feed", {
-          p_user_id: session.user.id,
-          p_limit: BATCH_SIZE,
-          p_offset: cursor ? posts.length : 0
-        });
-
-        if (error) {
-          console.error("get_following_feed RPC error:", error);
-          throw error;
+        const { data: followingData } = await supabase
+          .from("follows")
+          .select("following_id")
+          .eq("follower_id", session.user.id);
+        
+        const followingIds = followingData?.map(f => f.following_id) || [];
+        
+        if (followingIds.length > 0) {
+          query = query.in("user_id", followingIds);
+        } else {
+          // No following, return empty
+          setPosts([]);
+          setHasMore(false);
+          setLoading(false);
+          setLoadingMore(false);
+          setIsRefreshing(false);
+          return;
         }
-        fetchedPosts = data || [];
-      } else {
-        // Use mixed feed for better content diversity
-        const { data, error } = await supabase.rpc("get_mixed_feed", {
-          p_user_id: session.user.id,
-          p_limit: BATCH_SIZE,
-          p_offset: cursor ? posts.length : 0
-        });
-
-        if (error) {
-          console.error("get_mixed_feed RPC error:", error);
-          throw error;
-        }
-        fetchedPosts = data || [];
       }
 
-      // Filter out posts we've already seen (unless refreshing)
-      if (!isRefresh) {
-        fetchedPosts = fetchedPosts.filter(p => !seenPostIds.has(p.id));
-      }
+      const { data: fetchedPosts, error } = await query;
 
-      // Enrich posts with details
+      if (error) throw error;
+
+      // Enrich posts with user interaction data
       const postsWithDetails = await Promise.all(
-        fetchedPosts.map((post) => enrichPostWithDetails(post, session))
+        (fetchedPosts || []).map((post) => enrichPostWithDetails(post, session))
       );
-
-      // Track seen posts
-      const newSeenIds = new Set(seenPostIds);
-      postsWithDetails.forEach(p => newSeenIds.add(p.id));
-      setSeenPostIds(newSeenIds);
 
       if (isRefresh) {
         setPosts(postsWithDetails);
@@ -193,21 +195,14 @@ export const VerticalFeed = () => {
         setPosts(postsWithDetails);
       }
 
-      // Always set hasMore to true to enable infinite scrolling
-      setHasMore(true);
+      setHasMore((fetchedPosts || []).length === BATCH_SIZE);
       
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
     } catch (error: any) {
       console.error(`Feed fetch error (${feedType}):`, error);
-      
-      // Show detailed error in development
-      const errorMessage = import.meta.env.DEV 
-        ? `Failed to load posts: ${error.message || JSON.stringify(error)}`
-        : "Failed to load posts";
-      
-      toast.error(errorMessage);
+      toast.error("Failed to load posts");
       
       setLoading(false);
       setLoadingMore(false);
@@ -217,23 +212,11 @@ export const VerticalFeed = () => {
   };
 
   const loadMore = async () => {
-    if (loadingMore || posts.length === 0) return;
-    
-    // When reaching end, recycle content with fresh recommendations
-    if (posts.length > 0) {
-      setLoadingMore(true);
-      
-      // Clear seen posts periodically to allow content recycling
-      if (seenPostIds.size > 100) {
-        setSeenPostIds(new Set());
-      }
-      
-      await fetchPosts("load-more");
-    }
+    if (loadingMore || !hasMore || posts.length === 0) return;
+    await fetchPosts("load-more");
   };
 
   const handleRefresh = async () => {
-    setSeenPostIds(new Set()); // Clear seen posts
     await fetchPosts(undefined, true);
     toast.success("Feed refreshed");
   };
@@ -310,19 +293,8 @@ export const VerticalFeed = () => {
         user_id: user?.id || null,
         watch_duration: 0,
       });
-
-      // Update user interests based on this view
-      if (user?.id) {
-        await supabase.rpc("update_user_interests_from_interaction", {
-          p_user_id: user.id,
-          p_post_id: postId
-        });
-      }
     } catch (error) {
       // Silently fail - view tracking is not critical
-      if (import.meta.env.DEV) {
-        console.error("View tracking error:", error);
-      }
     }
   };
 

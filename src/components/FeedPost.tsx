@@ -84,16 +84,18 @@ export const FeedPost = ({
   }, []);
 
   useEffect(() => {
-    if (videoRef.current) {
+    if (videoRef.current && mediaType === "video") {
       if (isActive) {
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {
+          // Ignore autoplay errors
+        });
         setIsPlaying(true);
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
       }
     }
-  }, [isActive]);
+  }, [isActive, mediaType]);
 
   useEffect(() => {
     const video = videoRef.current;
