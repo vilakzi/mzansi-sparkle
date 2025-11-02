@@ -875,6 +875,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_view_post: {
+        Args: { post_owner_id: string; viewer_id: string }
+        Returns: boolean
+      }
       check_username_available: {
         Args: { new_username: string; user_id: string }
         Returns: boolean
@@ -904,6 +908,14 @@ export type Database = {
           shares_count: number
           user_id: string
           views_count: number
+        }[]
+      }
+      get_enriched_posts: {
+        Args: { p_post_ids: string[]; p_user_id: string }
+        Returns: {
+          post_id: string
+          user_liked: boolean
+          user_saved: boolean
         }[]
       }
       get_following_feed: {

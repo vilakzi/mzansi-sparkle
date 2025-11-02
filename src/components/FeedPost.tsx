@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -39,7 +39,7 @@ interface FeedPostProps {
   };
 }
 
-export const FeedPost = ({
+const FeedPostComponent = ({
   id,
   mediaUrl,
   mediaType,
@@ -496,3 +496,15 @@ export const FeedPost = ({
     </div>
   );
 };
+
+// Memoized export with custom comparison
+export const FeedPost = memo(FeedPostComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.isLiked === nextProps.isLiked &&
+    prevProps.isSaved === nextProps.isSaved &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.likesCount === nextProps.likesCount &&
+    prevProps.commentsCount === nextProps.commentsCount
+  );
+});

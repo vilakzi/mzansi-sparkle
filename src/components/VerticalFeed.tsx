@@ -102,47 +102,48 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
-  const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
-    // Check profile cache first
-    let profile = post.profile;
-    if (!profile) {
-      const cached = profileCacheRef.current.get(post.user_id);
-      if (cached) {
-        profile = cached;
-      } else {
-        const { data } = await supabase
-          .from("profiles")
-          .select("username, display_name, avatar_url")
-          .eq("id", post.user_id)
-          .single();
-        profile = data;
-        if (data) {
-          profileCacheRef.current.set(post.user_id, data);
-        }
-      }
+  const enrichPostsWithDetails = useCallback(async (postsToEnrich: any[], session: any) => {
+    if (postsToEnrich.length === 0) return [];
+
+    // Batch fetch all profiles needed
+    const missingProfileIds = postsToEnrich
+      .filter(p => !p.profile && !profileCacheRef.current.has(p.user_id))
+      .map(p => p.user_id);
+
+    if (missingProfileIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url")
+        .in("id", missingProfileIds);
+
+      profiles?.forEach(profile => {
+        profileCacheRef.current.set(profile.id, profile);
+      });
     }
 
-    const [likeData, saveData] = await Promise.all([
-      supabase
-        .from("post_likes")
-        .select("user_id")
-        .eq("post_id", post.id)
-        .eq("user_id", session.user.id)
-        .maybeSingle(),
-      supabase
-        .from("saved_posts")
-        .select("user_id")
-        .eq("post_id", post.id)
-        .eq("user_id", session.user.id)
-        .maybeSingle()
-    ]);
+    // Use batch enrichment function for likes and saves
+    const postIds = postsToEnrich.map(p => p.id);
+    const { data: enrichmentData } = await supabase.rpc('get_enriched_posts', {
+      p_user_id: session?.user?.id || null,
+      p_post_ids: postIds
+    });
 
-    return {
-      ...post,
-      profile,
-      user_liked: !!likeData.data,
-      user_saved: !!saveData.data
-    };
+    // Map enrichment data by post_id for quick lookup
+    const enrichmentMap = new Map(
+      enrichmentData?.map(item => [item.post_id, item]) || []
+    );
+
+    return postsToEnrich.map(post => {
+      const profile = post.profile || profileCacheRef.current.get(post.user_id);
+      const enrichment = enrichmentMap.get(post.id);
+
+      return {
+        ...post,
+        profile,
+        user_liked: enrichment?.user_liked || false,
+        user_saved: enrichment?.user_saved || false
+      };
+    });
   }, []);
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
@@ -237,10 +238,8 @@ export const VerticalFeed = () => {
 
       if (error) throw error;
 
-      // Enrich posts with user interaction data
-      const postsWithDetails = await Promise.all(
-        (fetchedPosts || []).map((post) => enrichPostWithDetails(post, session))
-      );
+      // Enrich posts with user interaction data using batch function
+      const postsWithDetails = await enrichPostsWithDetails(fetchedPosts || [], session);
 
       if (isRefresh) {
         setPosts(postsWithDetails);
@@ -301,9 +300,11 @@ export const VerticalFeed = () => {
           if (containerRef.current && containerRef.current.scrollTop < 100) {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-              const enrichedPost = await enrichPostWithDetails(payload.new, session);
-              setPosts((current) => [enrichedPost, ...current]);
-              setNewPostsCount(0);
+              const enrichedPosts = await enrichPostsWithDetails([payload.new], session);
+              if (enrichedPosts.length > 0) {
+                setPosts((current) => [enrichedPosts[0], ...current]);
+                setNewPostsCount(0);
+              }
             }
           }
         }
