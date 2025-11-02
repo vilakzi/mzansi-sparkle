@@ -148,7 +148,7 @@ export const VerticalFeed = () => {
         return;
       }
 
-      const BATCH_SIZE = 20;
+      const BATCH_SIZE = 50;
       const offset = cursor ? posts.length : 0;
 
       let fetchedPosts: any[] = [];
