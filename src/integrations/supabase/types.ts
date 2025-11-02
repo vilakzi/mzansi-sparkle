@@ -87,6 +87,75 @@ export type Database = {
           },
         ]
       }
+      conversation_participants: {
+        Row: {
+          conversation_id: string
+          id: string
+          is_muted: boolean | null
+          joined_at: string
+          last_read_at: string | null
+          unread_count: number | null
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          id?: string
+          is_muted?: boolean | null
+          joined_at?: string
+          last_read_at?: string | null
+          unread_count?: number | null
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          id?: string
+          is_muted?: boolean | null
+          joined_at?: string
+          last_read_at?: string | null
+          unread_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_participants_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          last_message_preview: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       follows: {
         Row: {
           created_at: string | null
@@ -143,6 +212,106 @@ export type Database = {
           posts_count?: number | null
         }
         Relationships: []
+      }
+      message_reactions: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          reaction_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          reaction_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          reaction_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          is_deleted: boolean | null
+          media_type: string | null
+          media_url: string | null
+          reply_to_message_id: string | null
+          sender_id: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          reply_to_message_id?: string | null
+          sender_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          reply_to_message_id?: string | null
+          sender_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -633,6 +802,10 @@ export type Database = {
           views_count: number
         }[]
       }
+      get_or_create_conversation: {
+        Args: { p_other_user_id: string }
+        Returns: string
+      }
       get_trending_posts: {
         Args: { limit_count?: number }
         Returns: {
@@ -658,6 +831,10 @@ export type Database = {
       is_blocked: {
         Args: { target_id: string; viewer_id: string }
         Returns: boolean
+      }
+      mark_conversation_as_read: {
+        Args: { p_conversation_id: string }
+        Returns: undefined
       }
       toggle_follow: {
         Args: { p_following_id: string }

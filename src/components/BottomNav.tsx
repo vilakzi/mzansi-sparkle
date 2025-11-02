@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Search, PlusCircle, Bell, User } from "lucide-react";
+import { Home, Search, PlusCircle, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,15 +21,15 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
   useEffect(() => {
     fetchUnreadCount();
     
-    // Subscribe to notification changes
+    // Subscribe to conversation changes for unread messages
     const channel = supabase
-      .channel("notifications-changes")
+      .channel("conversations-changes")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "notifications",
+          table: "conversation_participants",
         },
         () => {
           fetchUnreadCount();
@@ -47,13 +47,16 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { count } = await supabase
-        .from("notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("read", false);
+      // Get total unread messages count from all conversations
+      const { data: participants, error } = await supabase
+        .from("conversation_participants")
+        .select("unread_count")
+        .eq("user_id", user.id);
 
-      setUnreadCount(count || 0);
+      if (error) throw error;
+
+      const total = participants?.reduce((sum, p) => sum + (p.unread_count || 0), 0) || 0;
+      setUnreadCount(total);
     } catch (error) {
       console.error("Error fetching unread count:", error);
     }
@@ -82,10 +85,10 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
       isSpecial: true,
     },
     {
-      path: "/notifications",
-      icon: Bell,
-      label: "Notifications",
-      onClick: () => navigate("/notifications"),
+      path: "/messages",
+      icon: MessageCircle,
+      label: "Messages",
+      onClick: () => navigate("/messages"),
       badge: unreadCount,
     },
     {
