@@ -91,6 +91,16 @@ export const VerticalFeed = () => {
     };
   }, [loadingMore, loading, posts.length]);
 
+  // Ensure first post is active on mount
+  useEffect(() => {
+    if (posts.length > 0 && currentIndex === 0) {
+      // Force a tiny delay to ensure DOM is ready
+      setTimeout(() => {
+        setCurrentIndex(0);
+      }, 100);
+    }
+  }, [posts.length]);
+
   const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
     const [profileData, likeData, saveData] = await Promise.all([
       supabase
@@ -271,7 +281,11 @@ export const VerticalFeed = () => {
       if (!containerRef.current) return;
       
       const scrollTop = containerRef.current.scrollTop;
-      const index = Math.round(scrollTop / window.innerHeight);
+      const containerHeight = containerRef.current.clientHeight;
+      
+      // Calculate which post is most visible (center of viewport)
+      const centerPoint = scrollTop + (containerHeight / 2);
+      const index = Math.floor(centerPoint / window.innerHeight);
       
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
