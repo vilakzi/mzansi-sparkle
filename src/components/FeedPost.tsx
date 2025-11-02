@@ -316,31 +316,6 @@ export const FeedPost = ({
             playsInline
             muted={isMuted}
           />
-          
-          {/* Interactive seekbar */}
-          <div className="absolute bottom-[88px] left-0 right-0 px-4 z-[60] pointer-events-auto">
-            <div className="flex items-center gap-2 text-white text-xs mb-1">
-              <span>{formatTime(currentTime)}</span>
-              <span>/</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-            <div 
-              className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
-              onMouseDown={handleSeekBarMouseDown}
-              onTouchStart={handleSeekBarTouch}
-              onTouchMove={handleSeekBarTouchMove}
-              onTouchEnd={handleSeekBarTouchEnd}
-            >
-              <div 
-                className="h-full bg-white rounded-full transition-all duration-100"
-                style={{ width: `${progress}%` }}
-              />
-              <div 
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
-              />
-            </div>
-          </div>
 
           {/* Play/Pause indicator */}
           {!isPlaying && (
@@ -405,7 +380,7 @@ export const FeedPost = ({
         />
       )}
       
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none z-10">
         {profile && (
           <div className="mb-4 pointer-events-auto">
             <Avatar 
@@ -468,8 +443,35 @@ export const FeedPost = ({
           </button>
         </div>
       </div>
+
+      {/* Interactive seekbar - positioned after gradient to ensure visibility */}
+      {mediaType === 'video' && (
+        <div className="absolute bottom-24 left-0 right-0 px-4 z-[70] pointer-events-auto">
+          <div className="flex items-center gap-2 text-white text-xs mb-1">
+            <span>{formatTime(currentTime)}</span>
+            <span>/</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+          <div 
+            className="relative h-1 bg-white/30 rounded-full cursor-pointer group py-3"
+            onMouseDown={handleSeekBarMouseDown}
+            onTouchStart={handleSeekBarTouch}
+            onTouchMove={handleSeekBarTouchMove}
+            onTouchEnd={handleSeekBarTouchEnd}
+          >
+            <div 
+              className="h-1 bg-white rounded-full transition-all duration-100"
+              style={{ width: `${progress}%` }}
+            />
+            <div 
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+            />
+          </div>
+        </div>
+      )}
       
-      <CommentSheet 
+      <CommentSheet
         postId={id} 
         isOpen={showComments} 
         onClose={() => setShowComments(false)} 
