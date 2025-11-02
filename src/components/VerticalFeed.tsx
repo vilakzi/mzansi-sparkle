@@ -114,13 +114,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     }
   }, [posts.length]);
 
-  // Windowing: render only visible posts + buffer for performance
-  const WINDOW_SIZE = 7; // Render current + 3 before + 3 after
-  const visiblePosts = posts.slice(
-    Math.max(0, currentIndex - 3),
-    Math.min(posts.length, currentIndex + 4)
-  );
-  const windowOffset = Math.max(0, currentIndex - 3);
+  // Keep all videos in DOM for caching, but hide distant ones
+  const VISIBLE_RANGE = 3; // Show current + 3 before + 3 after
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -477,19 +472,23 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             </div>
           ) : (
             <>
-              {/* Spacer for windowed posts */}
-              {windowOffset > 0 && (
-                <div style={{ height: `${windowOffset * window.innerHeight}px` }} />
-              )}
-              
-              {/* Render only visible posts + buffer */}
-              {visiblePosts.map((post, visibleIndex) => {
-                const actualIndex = windowOffset + visibleIndex;
+              {/* Render ALL posts, hide distant ones to preserve video cache */}
+              {posts.map((post, index) => {
+                const distanceFromCurrent = Math.abs(index - currentIndex);
+                const isInVisibleRange = distanceFromCurrent <= VISIBLE_RANGE;
+                
                 return (
                   <div
-                    key={`${post.id}-${actualIndex}`}
-                    ref={actualIndex === posts.length - 5 ? lastPostRef : null}
+                    key={`${post.id}-${index}`}
+                    ref={index === posts.length - 5 ? lastPostRef : null}
                     className="snap-start snap-always"
+                    style={{
+                      // Keep in DOM but hide if too far from current
+                      display: isInVisibleRange ? 'block' : 'none',
+                      // Optimize rendering for hidden elements
+                      opacity: isInVisibleRange ? 1 : 0,
+                      pointerEvents: isInVisibleRange ? 'auto' : 'none',
+                    }}
                   >
                     <FeedPost
                       id={post.id}
@@ -501,12 +500,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
                       sharesCount={post.shares_count}
                       isSaved={post.user_saved || false}
                       isLiked={post.user_liked || false}
-                      isActive={actualIndex === currentIndex}
-                      isPrevious={actualIndex === currentIndex - 1}
-                      isNext={actualIndex === currentIndex + 1}
+                      isActive={index === currentIndex}
+                      isPrevious={index === currentIndex - 1}
+                      isNext={index === currentIndex + 1}
                       nextVideoUrl={
-                        actualIndex === currentIndex && posts[actualIndex + 1]?.media_type === 'video'
-                          ? posts[actualIndex + 1]?.media_url
+                        index === currentIndex && posts[index + 1]?.media_type === 'video'
+                          ? posts[index + 1]?.media_url
                           : undefined
                       }
                       onLike={() => handleLike(post.id)}
@@ -518,11 +517,6 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
                   </div>
                 );
               })}
-              
-              {/* Spacer for posts after window */}
-              {windowOffset + visiblePosts.length < posts.length && (
-                <div style={{ height: `${(posts.length - windowOffset - visiblePosts.length) * window.innerHeight}px` }} />
-              )}
               {loadingMore && (
                 <div className="flex h-screen items-center justify-center snap-start">
                   <div className="text-center space-y-4">
