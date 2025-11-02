@@ -318,7 +318,7 @@ export const FeedPost = ({
           />
           
           {/* Interactive seekbar */}
-          <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
+          <div className="absolute bottom-36 left-0 right-0 px-4 z-20 pointer-events-auto">
             <div className="flex items-center gap-2 text-white text-xs mb-1">
               <span>{formatTime(currentTime)}</span>
               <span>/</span>
