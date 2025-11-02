@@ -1,11 +1,11 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VerticalFeed } from "@/components/VerticalFeed";
-import { UploadButton } from "@/components/UploadButton";
+import { ChunkedUpload } from "@/components/ChunkedUpload";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { toast } from "sonner";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 type Profile = {
   username: string;
@@ -17,17 +17,12 @@ const Index = () => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [initialPosts, setInitialPosts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setUser(session.user);
-        fetchProfile(session.user.id);
-      }
-    });
+    loadInitialData();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -35,9 +30,7 @@ const Index = () => {
           navigate("/auth");
         } else {
           setUser(session.user);
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+          loadInitialData();
         }
       }
     );
@@ -45,29 +38,43 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const fetchProfile = async (userId: string) => {
+  const loadInitialData = async () => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url")
-        .eq("id", userId)
-        .single();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      setUser(session.user);
+
+      // Use optimized single-query function for initial load
+      const { data, error } = await supabase.rpc('get_initial_feed_data', {
+        p_user_id: session.user.id
+      });
 
       if (error) throw error;
-      setProfile(data);
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    }
-  };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    toast.success("Logged out successfully");
+      if (data && typeof data === 'object' && data !== null) {
+        const feedData = data as { profile: Profile; posts: any[] };
+        setProfile(feedData.profile);
+        setInitialPosts(feedData.posts || []);
+      }
+    } catch (error) {
+      console.error("Error loading initial data:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleUploadClick = () => {
     setShowUpload(true);
   };
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   if (!user) {
     return null;
@@ -79,10 +86,10 @@ const Index = () => {
       
       <div className="flex justify-center">
         <div className="relative w-full max-w-md">
-          <VerticalFeed />
+          <VerticalFeed initialPosts={initialPosts} />
           
           {showUpload && (
-            <UploadButton onClose={() => setShowUpload(false)} />
+            <ChunkedUpload onClose={() => setShowUpload(false)} />
           )}
           
           <BottomNav onUploadClick={handleUploadClick} userProfile={profile} />

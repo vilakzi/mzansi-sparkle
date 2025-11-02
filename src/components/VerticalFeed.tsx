@@ -27,10 +27,14 @@ interface Post {
   };
 }
 
-export const VerticalFeed = () => {
-  const [posts, setPosts] = useState<Post[]>([]);
+type VerticalFeedProps = {
+  initialPosts?: Post[];
+};
+
+export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
+  const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialPosts.length === 0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [feedType, setFeedType] = useState<"for-you" | "following">("for-you");
@@ -53,8 +57,16 @@ export const VerticalFeed = () => {
     initializeUser();
   }, []);
 
+  // Initialize with provided posts
   useEffect(() => {
-    if (userId) {
+    if (initialPosts.length > 0) {
+      setPosts(initialPosts);
+      setLoading(false);
+    }
+  }, [initialPosts]);
+
+  useEffect(() => {
+    if (userId && initialPosts.length === 0) {
       fetchPosts();
       const cleanup = setupRealtimeSubscription();
       return cleanup;
@@ -62,7 +74,7 @@ export const VerticalFeed = () => {
   }, [userId]);
 
   useEffect(() => {
-    if (userId) {
+    if (userId && initialPosts.length === 0) {
       setPosts([]);
       setHasMore(true);
       setLoading(true);
