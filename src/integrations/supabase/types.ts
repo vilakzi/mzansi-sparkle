@@ -959,6 +959,23 @@ export type Database = {
           views_count: number
         }[]
       }
+      get_shuffled_feed: {
+        Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+        Returns: {
+          bucket_order: number
+          caption: string
+          comments_count: number
+          created_at: string
+          id: string
+          likes_count: number
+          media_type: string
+          media_url: string
+          saves_count: number
+          shares_count: number
+          user_id: string
+          views_count: number
+        }[]
+      }
       get_trending_posts: {
         Args: { limit_count?: number }
         Returns: {
