@@ -562,11 +562,12 @@ export const VerticalFeed = () => {
         <div
           ref={containerRef}
           onScroll={handleScroll}
-          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain"
+          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain touch-pan-y"
           style={{ 
             scrollbarWidth: 'none', 
             msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch'
+            WebkitOverflowScrolling: 'touch',
+            willChange: 'scroll-position'
           }}
         >
           {posts.length === 0 && !loading ? (

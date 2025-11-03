@@ -327,10 +327,10 @@ export const FeedPost = ({
   };
 
   return (
-    <div className="relative h-screen w-full snap-start snap-always will-change-transform">
+    <div className="relative h-screen w-full snap-start snap-always will-change-transform touch-none">
       {mediaType === "video" ? (
         <div className="relative h-full w-full">
-          <div className="absolute inset-0 pointer-events-none" onClick={handleVideoClick}>
+          <div className="absolute inset-0 pointer-events-none touch-auto" onClick={handleVideoClick}>
             <div className="w-full h-full pointer-events-auto" />
           </div>
           <video
@@ -403,6 +403,8 @@ export const FeedPost = ({
           src={mediaUrl}
           alt="Post"
           className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
         />
       )}
       
