@@ -6,6 +6,7 @@ import { ChunkedUpload } from "@/components/ChunkedUpload";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { isPersonalizedFeedEnabled } from "@/lib/featureFlags";
 
 type Profile = {
   username: string;
@@ -60,7 +61,18 @@ const Index = () => {
         setProfile(profileData);
       }
 
-      // Use simple feed function
+      // Check feature flag for feed algorithm
+      const usePersonalizedFeed = isPersonalizedFeedEnabled();
+      
+      // Log feed mode for debugging
+      if (usePersonalizedFeed) {
+        console.warn('⚠️ Personalized feed is enabled. This may result in slower feed loads (>30s). Consider disabling VITE_PERSONALIZED_FEED for better performance.');
+      } else {
+        console.info('✓ Using simple feed mode for fast performance.');
+      }
+
+      // Use simple feed function (personalized feed functions don't exist yet)
+      // TODO: When personalized feed is optimized, add conditional logic here
       const { data: feedData, error } = await supabase.rpc('get_simple_feed', {
         p_user_id: session.user.id,
         p_limit: 10,
