@@ -182,7 +182,12 @@ export const VerticalFeed = () => {
         setPosts(postsWithDetails);
       }
 
-      setHasMore((fetchedPosts || []).length === BATCH_SIZE);
+      // Phase 4: Always keep hasMore = true for infinite rotation
+      // Small batch means we might be at end of fresh content, but smart rotation continues
+      if ((fetchedPosts || []).length < BATCH_SIZE && !isRefresh) {
+        console.log('Reached end of fresh content batch, smart rotation will continue');
+      }
+      setHasMore(true); // Always true - feed never ends!
       
       setLoading(false);
       setLoadingMore(false);
@@ -204,8 +209,60 @@ export const VerticalFeed = () => {
   };
 
   const handleRefresh = async () => {
-    await fetchPosts(undefined, true);
-    toast.success("Feed refreshed");
+    if (!userId) return;
+    
+    setIsRefreshing(true);
+    
+    try {
+      // Get timestamp of newest post in current feed
+      const newestPostTime = posts.length > 0 ? posts[0]?.created_at : new Date(0).toISOString();
+      
+      // Fetch posts newer than what we have
+      const { data: newPosts, error } = await supabase.rpc('get_new_posts_since', {
+        p_user_id: userId,
+        p_feed_type: feedType,
+        p_since: newestPostTime,
+        p_limit: 20
+      });
+
+      if (error) throw error;
+
+      const postsWithDetails = (newPosts || []).map((post: any) => ({
+        id: post.id,
+        media_url: post.media_url,
+        media_type: post.media_type,
+        caption: post.caption,
+        likes_count: post.likes_count,
+        comments_count: post.comments_count,
+        shares_count: post.shares_count,
+        created_at: post.created_at,
+        user_id: post.user_id,
+        user_liked: post.is_liked,
+        user_saved: post.is_saved,
+        profile: {
+          display_name: post.display_name,
+          username: post.username,
+          avatar_url: post.avatar_url
+        }
+      }));
+      
+      if (postsWithDetails.length > 0) {
+        // Add new posts to top
+        setPosts(prev => [...postsWithDetails, ...prev]);
+        toast.success(`${postsWithDetails.length} new ${postsWithDetails.length === 1 ? 'post' : 'posts'} loaded`);
+        setNewPostsCount(0);
+        scrollToTop();
+      } else {
+        // No new posts - do full refresh with smart rotation
+        await fetchPosts(undefined, true);
+        toast.success("Feed refreshed with fresh content");
+      }
+    } catch (error) {
+      console.error('Refresh error:', error);
+      toast.error("Failed to refresh feed");
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const scrollToTop = () => {
@@ -260,8 +317,30 @@ export const VerticalFeed = () => {
           trackView(posts[index].id);
         }
       }
+
+      // Phase 2: Preemptive loading when 10 posts remaining
+      const postsRemaining = posts.length - index;
+      if (postsRemaining <= 10 && !loadingMore && hasMore) {
+        loadMore();
+      }
     }, 100);
-  }, [currentIndex, posts]);
+  }, [currentIndex, posts, loadingMore, hasMore]);
+
+  // Track post as seen for smart feed rotation
+  const markPostAsSeen = async (postId: string) => {
+    if (!userId) return;
+    
+    // Silently track in background (fire and forget)
+    try {
+      await supabase.from('user_seen_posts').upsert({
+        user_id: userId,
+        post_id: postId,
+        last_seen_at: new Date().toISOString()
+      }, { onConflict: 'user_id,post_id' });
+    } catch {
+      // Fail silently
+    }
+  };
 
   const trackView = async (postId: string) => {
     try {
@@ -272,6 +351,11 @@ export const VerticalFeed = () => {
         user_id: user?.id || null,
         watch_duration: 0,
       });
+
+      // Mark post as seen for smart rotation
+      if (user?.id) {
+        markPostAsSeen(postId);
+      }
     } catch (error) {
       // Silently fail
     }
@@ -499,7 +583,7 @@ export const VerticalFeed = () => {
               {posts.map((post, index) => (
                 <div
                   key={`${post.id}-${index}`}
-                  ref={index === posts.length - 5 ? lastPostRef : null}
+                  ref={index === posts.length - 8 ? lastPostRef : null}
                   className="snap-start snap-always"
                 >
                   <FeedPost
@@ -525,7 +609,11 @@ export const VerticalFeed = () => {
                 <div className="flex h-screen items-center justify-center snap-start">
                   <div className="text-center space-y-4">
                     <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
-                    <p className="text-muted-foreground">Loading more amazing content...</p>
+                    <p className="text-muted-foreground">
+                      {posts.length > 50 
+                        ? "Finding more great content..." 
+                        : "Loading more amazing content..."}
+                    </p>
                   </div>
                 </div>
               )}

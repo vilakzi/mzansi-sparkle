@@ -744,6 +744,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_seen_posts: {
+        Row: {
+          last_seen_at: string | null
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          last_seen_at?: string | null
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          last_seen_at?: string | null
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_seen_posts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_seen_posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -809,14 +842,14 @@ export type Database = {
           followers_count: number
           following_count: number
           id: string
+          is_liked: boolean
+          is_saved: boolean
           likes_count: number
           media_type: string
           media_url: string
           saves_count: number
           shares_count: number
           user_id: string
-          user_liked: boolean
-          user_saved: boolean
           username: string
           views_count: number
         }[]
@@ -834,6 +867,35 @@ export type Database = {
           saves_count: number
           shares_count: number
           user_id: string
+          views_count: number
+        }[]
+      }
+      get_new_posts_since: {
+        Args: {
+          p_feed_type: string
+          p_limit?: number
+          p_since: string
+          p_user_id: string
+        }
+        Returns: {
+          avatar_url: string
+          bio: string
+          caption: string
+          comments_count: number
+          created_at: string
+          display_name: string
+          followers_count: number
+          following_count: number
+          id: string
+          is_liked: boolean
+          is_saved: boolean
+          likes_count: number
+          media_type: string
+          media_url: string
+          saves_count: number
+          shares_count: number
+          user_id: string
+          username: string
           views_count: number
         }[]
       }
