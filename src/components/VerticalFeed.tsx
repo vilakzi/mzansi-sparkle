@@ -143,7 +143,7 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Use optimized RPC function - fetches everything in ONE query (70% faster!)
+      // Use optimized RPC function with smart rotation
       const { data: fetchedPosts, error } = await supabase.rpc('get_feed_optimized', {
         p_user_id: session.user.id,
         p_feed_type: feedType,
@@ -164,8 +164,8 @@ export const VerticalFeed = () => {
         shares_count: post.shares_count,
         created_at: post.created_at,
         user_id: post.user_id,
-        user_liked: post.user_liked,
-        user_saved: post.user_saved,
+        user_liked: post.is_liked,
+        user_saved: post.is_saved,
         profile: {
           display_name: post.display_name,
           username: post.username,
@@ -182,12 +182,8 @@ export const VerticalFeed = () => {
         setPosts(postsWithDetails);
       }
 
-      // Phase 4: Always keep hasMore = true for infinite rotation
-      // Small batch means we might be at end of fresh content, but smart rotation continues
-      if ((fetchedPosts || []).length < BATCH_SIZE && !isRefresh) {
-        console.log('Reached end of fresh content batch, smart rotation will continue');
-      }
-      setHasMore(true); // Always true - feed never ends!
+      // Always keep hasMore = true for infinite feed (smart rotation ensures endless content)
+      setHasMore(true);
       
       setLoading(false);
       setLoadingMore(false);
@@ -215,54 +211,56 @@ export const VerticalFeed = () => {
     
     try {
       // Get timestamp of newest post in current feed
-      const newestPostTime = posts.length > 0 ? posts[0]?.created_at : new Date(0).toISOString();
+      const newestPostTime = posts[0]?.created_at;
       
-      // Fetch posts newer than what we have
-      const { data: newPosts, error } = await supabase.rpc('get_new_posts_since', {
-        p_user_id: userId,
-        p_feed_type: feedType,
-        p_since: newestPostTime,
-        p_limit: 20
-      });
-
-      if (error) throw error;
-
-      const postsWithDetails = (newPosts || []).map((post: any) => ({
-        id: post.id,
-        media_url: post.media_url,
-        media_type: post.media_type,
-        caption: post.caption,
-        likes_count: post.likes_count,
-        comments_count: post.comments_count,
-        shares_count: post.shares_count,
-        created_at: post.created_at,
-        user_id: post.user_id,
-        user_liked: post.is_liked,
-        user_saved: post.is_saved,
-        profile: {
-          display_name: post.display_name,
-          username: post.username,
-          avatar_url: post.avatar_url
+      if (newestPostTime) {
+        // Fetch posts newer than what we have
+        const { data: newPosts } = await supabase.rpc('get_new_posts_since', {
+          p_user_id: userId,
+          p_feed_type: feedType,
+          p_since: newestPostTime,
+          p_limit: 20
+        });
+        
+        if (newPosts && newPosts.length > 0) {
+          // Map new posts
+          const mappedNewPosts = newPosts.map((post: any) => ({
+            id: post.id,
+            media_url: post.media_url,
+            media_type: post.media_type,
+            caption: post.caption,
+            likes_count: post.likes_count,
+            comments_count: post.comments_count,
+            shares_count: post.shares_count,
+            created_at: post.created_at,
+            user_id: post.user_id,
+            user_liked: post.is_liked,
+            user_saved: post.is_saved,
+            profile: {
+              display_name: post.display_name,
+              username: post.username,
+              avatar_url: post.avatar_url
+            }
+          }));
+          
+          setPosts(prev => [...mappedNewPosts, ...prev]);
+          toast.success(`${newPosts.length} new post${newPosts.length === 1 ? '' : 's'} loaded`);
+          setNewPostsCount(0);
+          scrollToTop();
+          setIsRefreshing(false);
+          return;
         }
-      }));
-      
-      if (postsWithDetails.length > 0) {
-        // Add new posts to top
-        setPosts(prev => [...postsWithDetails, ...prev]);
-        toast.success(`${postsWithDetails.length} new ${postsWithDetails.length === 1 ? 'post' : 'posts'} loaded`);
-        setNewPostsCount(0);
-        scrollToTop();
-      } else {
-        // No new posts - do full refresh with smart rotation
-        await fetchPosts(undefined, true);
-        toast.success("Feed refreshed with fresh content");
       }
+      
+      // No new posts - do full refresh with smart rotation
+      await fetchPosts(undefined, true);
+      toast.success("Feed refreshed with fresh content");
     } catch (error) {
       console.error('Refresh error:', error);
       toast.error("Failed to refresh feed");
-    } finally {
-      setIsRefreshing(false);
     }
+    
+    setIsRefreshing(false);
   };
 
   const scrollToTop = () => {
@@ -318,7 +316,7 @@ export const VerticalFeed = () => {
         }
       }
 
-      // Phase 2: Preemptive loading when 10 posts remaining
+      // Preemptive loading when 10 posts remaining
       const postsRemaining = posts.length - index;
       if (postsRemaining <= 10 && !loadingMore && hasMore) {
         loadMore();
@@ -326,18 +324,17 @@ export const VerticalFeed = () => {
     }, 100);
   }, [currentIndex, posts, loadingMore, hasMore]);
 
-  // Track post as seen for smart feed rotation
   const markPostAsSeen = async (postId: string) => {
     if (!userId) return;
     
-    // Silently track in background (fire and forget)
+    // Silently track in background for smart rotation
     try {
       await supabase.from('user_seen_posts').upsert({
         user_id: userId,
         post_id: postId,
         last_seen_at: new Date().toISOString()
       }, { onConflict: 'user_id,post_id' });
-    } catch {
+    } catch (error) {
       // Fail silently
     }
   };
@@ -352,7 +349,7 @@ export const VerticalFeed = () => {
         watch_duration: 0,
       });
 
-      // Mark post as seen for smart rotation
+      // Mark post as seen for smart feed rotation
       if (user?.id) {
         markPostAsSeen(postId);
       }
@@ -624,3 +621,5 @@ export const VerticalFeed = () => {
     </div>
   );
 };
+
+export default VerticalFeed;
