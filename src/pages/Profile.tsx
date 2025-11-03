@@ -118,7 +118,12 @@ const Profile = () => {
         ) : (postsData || []).map(post => ({ ...post, user_liked: false }));
 
         setPosts(postsWithLikes);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
         toast.error("Failed to load profile");
         console.error(error);
       } finally {
@@ -147,8 +152,13 @@ const Profile = () => {
       });
 
       toast.success(result.is_following ? "Following" : "Unfollowed");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update follow status");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
+      toast.error(error instanceof Error ? error.message : "Failed to update follow status");
     }
   };
 
@@ -192,7 +202,12 @@ const Profile = () => {
         // Delete from storage
         const storagePath = post.media_url.split('/').slice(-2).join('/');
         await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
         console.error('Error deleting post:', error);
         // Restore post on error
         setPosts((current) => [...current, post].sort((a, b) => 

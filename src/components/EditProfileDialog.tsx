@@ -207,11 +207,16 @@ export function EditProfileDialog({
 
         onProfileUpdate();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error('Error updating profile:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to update profile',
+        description: error instanceof Error ? error.message : 'Failed to update profile',
         variant: 'destructive',
       });
     } finally {

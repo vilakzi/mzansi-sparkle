@@ -163,7 +163,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error('Feed fetch error:', error);
       toast.error("Failed to load posts");
 
@@ -306,7 +311,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           p.id === postId ? { ...p, is_saved: !p.is_saved } : p
         )
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       toast.error("Failed to save post");
       if (import.meta.env.DEV) {
         console.error(error);
@@ -346,7 +356,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         if (deleteError) throw deleteError;
         const storagePath = post.media_url.split('/').slice(-2).join('/');
         await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
         console.error('Error deleting post:', error);
         setPosts((current) => {
           const newPosts = [...current];

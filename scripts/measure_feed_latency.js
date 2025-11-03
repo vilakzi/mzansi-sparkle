@@ -4,7 +4,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 if (!supabaseUrl || !supabaseKey) {
   console.error("SUPABASE_URL and SUPABASE_KEY are required");
-  process.exit(1);
+  Deno.exit(1);
 }
 const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -19,7 +19,7 @@ async function run() {
   const userId = process.env.TEST_USER_ID;
   if (!userId) {
     console.error("Provide TEST_USER_ID env var");
-    process.exit(1);
+    Deno.exit(1);
   }
 
   await measure("get_simple_feed", () =>
@@ -33,5 +33,5 @@ async function run() {
 
 run().catch((err) => {
   console.error(err);
-  process.exit(1);
+  Deno.exit(1);
 });

@@ -90,7 +90,12 @@ const Notifications = () => {
         .update({ read: true })
         .eq("user_id", user.id)
         .eq("read", false);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching notifications:", error);
       toast.error("Failed to load notifications");
     } finally {
