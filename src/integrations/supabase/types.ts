@@ -827,7 +827,7 @@ export type Database = {
       }
       get_feed_optimized: {
         Args: {
-          p_feed_type?: string
+          p_feed_type: string
           p_limit?: number
           p_offset?: number
           p_user_id: string
