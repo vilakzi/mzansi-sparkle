@@ -44,7 +44,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const profileCacheRef = useRef<Map<string, any>>(new Map());
+  const profileCacheRef = useRef<Map<string, unknown>>(new Map());
   const trackedPostsRef = useRef<Set<string>>(new Set()); // Dedupe tracking
 
   useEffect(() => {
@@ -133,21 +133,24 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         offset,
       });
 
-      const fetchedPosts = (rows || []).map((post: any) => ({
-        ...post,
-        media_type: post.media_type as "image" | "video",
-        user_liked: post.is_liked,
-        user_saved: post.is_saved,
+      const fetchedPosts = (rows || []).map((post: unknown) => {
+        const postTyped = post as Post & { is_liked: boolean; is_saved: boolean };
+        return {
+        ...postTyped,
+        media_type: postTyped.media_type as "image" | "video",
+        user_liked: postTyped.is_liked,
+        user_saved: postTyped.is_saved,
         profile: {
-          id: post.user_id,
-          username: post.username,
-          display_name: post.display_name,
-          avatar_url: post.avatar_url,
-          bio: post.bio,
-          followers_count: post.followers_count,
-          following_count: post.following_count,
+          id: postTyped.user_id,
+          username: postTyped.username,
+          display_name: postTyped.display_name,
+          avatar_url: postTyped.avatar_url,
+          bio: postTyped.bio,
+          followers_count: postTyped.followers_count,
+          following_count: postTyped.following_count,
         }
-      }));
+      };
+      });
 
       if (isRefresh) {
         setPosts(fetchedPosts);
@@ -163,7 +166,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error('Feed fetch error:', error);
       toast.error("Failed to load posts");
 
@@ -306,7 +314,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           p.id === postId ? { ...p, is_saved: !p.is_saved } : p
         )
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       toast.error("Failed to save post");
       if (import.meta.env.DEV) {
         console.error(error);
@@ -346,7 +359,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         if (deleteError) throw deleteError;
         const storagePath = post.media_url.split('/').slice(-2).join('/');
         await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
         console.error('Error deleting post:', error);
         setPosts((current) => {
           const newPosts = [...current];

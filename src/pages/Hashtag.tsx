@@ -65,7 +65,12 @@ const Hashtag = () => {
 
       if (postsError) throw postsError;
       setPosts(postsData || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching hashtag posts:", error);
       toast.error("Failed to load hashtag posts");
     } finally {

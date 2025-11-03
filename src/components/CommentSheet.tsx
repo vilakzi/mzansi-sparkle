@@ -68,13 +68,14 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       const commentMap = new Map<string, Comment>();
       const rootComments: Comment[] = [];
 
-      (data || []).forEach((comment: any) => {
+      (data || []).forEach((comment: unknown) => {
+        const commentTyped = comment as Comment & { profiles: Comment['profile'] };
         const commentObj: Comment = {
-          ...comment,
-          profile: comment.profiles,
+          ...commentTyped,
+          profile: commentTyped.profiles,
           replies: [],
         };
-        commentMap.set(comment.id, commentObj);
+        commentMap.set(commentObj.id, commentObj);
       });
 
       commentMap.forEach((comment) => {
@@ -90,7 +91,12 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       });
 
       setComments(rootComments);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching comments:", error);
       toast.error("Failed to load comments");
     }
@@ -120,7 +126,12 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       setReplyingTo(null);
       toast.success("Comment posted");
       fetchComments();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error posting comment:", error);
       toast.error("Failed to post comment");
     } finally {
