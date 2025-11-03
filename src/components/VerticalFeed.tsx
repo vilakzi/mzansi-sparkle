@@ -100,6 +100,28 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
+  // Preload next 3 videos when current video changes
+  useEffect(() => {
+    if (currentIndex >= 0 && posts.length > 0) {
+      const nextVideos = posts
+        .slice(currentIndex + 1, currentIndex + 4)
+        .filter(p => p.media_type === 'video');
+      
+      // Remove old prefetch links
+      document.querySelectorAll('link[data-video-prefetch]').forEach(link => link.remove());
+      
+      // Add new prefetch links for upcoming videos
+      nextVideos.forEach(post => {
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.as = 'video';
+        link.href = post.media_url;
+        link.setAttribute('data-video-prefetch', 'true');
+        document.head.appendChild(link);
+      });
+    }
+  }, [currentIndex, posts]);
+
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
       if (isRefresh) {
