@@ -1,28 +1,47 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { toast } from "sonner";
 import { z } from "zod";
 
 const authSchema = z.object({
-  email: z.string().trim().email("Invalid email format").max(255, "Email too long"),
+  email: z.string().trim().email("Invalid email format").max(
+    255,
+    "Email too long",
+  ),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+    .regex(
+      /[^A-Za-z0-9]/,
+      "Password must contain at least one special character",
+    ),
 });
 
 const signupSchema = authSchema.extend({
-  displayName: z.string().trim().min(2, "Display name must be at least 2 characters").max(50, "Display name must be less than 50 characters"),
-  username: z.string().trim().min(3, "Username must be at least 3 characters").max(20, "Username must be less than 20 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  displayName: z.string().trim().min(
+    2,
+    "Display name must be at least 2 characters",
+  ).max(50, "Display name must be less than 50 characters"),
+  username: z.string().trim().min(3, "Username must be at least 3 characters")
+    .max(20, "Username must be less than 20 characters")
+    .regex(
+      /^[a-zA-Z0-9_]+$/,
+      "Username can only contain letters, numbers, and underscores",
+    ),
 });
 
 const Auth = () => {
@@ -48,10 +67,10 @@ const Auth = () => {
 
     try {
       // Validate input before submitting
-      const validation = isLogin 
+      const validation = isLogin
         ? authSchema.safeParse({ email, password })
         : signupSchema.safeParse({ email, password, displayName, username });
-        
+
       if (!validation.success) {
         toast.error(validation.error.errors[0].message);
         setLoading(false);
@@ -76,14 +95,21 @@ const Auth = () => {
             data: {
               display_name: validatedData.displayName,
               username: validatedData.username,
-            }
+            },
           },
         });
         if (error) throw error;
         toast.success("Account created! Please check your email.");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Authentication failed");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
+      toast.error(
+        error instanceof Error ? error.message : "Authentication failed",
+      );
     } finally {
       setLoading(false);
     }
@@ -92,14 +118,21 @@ const Auth = () => {
   const handleGoogleAuth = async () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}/`,
         },
       });
       if (error) throw error;
-    } catch (error: any) {
-      toast.error(error.message || "Google sign in failed");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
+      toast.error(
+        error instanceof Error ? error.message : "Google sign in failed",
+      );
     }
   };
 
@@ -111,7 +144,9 @@ const Auth = () => {
             zaBaddies_Online
           </CardTitle>
           <CardDescription>
-            {isLogin ? "Welcome back! Sign in to continue" : "Join the community and start sharing"}
+            {isLogin
+              ? "Welcome back! Sign in to continue"
+              : "Join the community and start sharing"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -169,13 +204,15 @@ const Auth = () => {
               {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
             </Button>
           </form>
-          
+
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+              <span className="bg-background px-2 text-muted-foreground">
+                Or continue with
+              </span>
             </div>
           </div>
 
@@ -212,7 +249,9 @@ const Auth = () => {
               onClick={() => setIsLogin(!isLogin)}
               className="text-primary hover:underline"
             >
-              {isLogin ? "Need an account? Sign up" : "Already have an account? Sign in"}
+              {isLogin
+                ? "Need an account? Sign up"
+                : "Already have an account? Sign in"}
             </button>
           </div>
         </CardContent>

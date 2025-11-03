@@ -26,7 +26,9 @@ const Saved = () => {
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
+  const [userProfile, setUserProfile] = useState<
+    { username: string } | undefined
+  >();
 
   useEffect(() => {
     fetchSavedPosts();
@@ -77,7 +79,12 @@ const Saved = () => {
 
       if (error) throw error;
       setSavedPosts(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching saved posts:", error);
       toast.error("Failed to load saved posts");
     } finally {
@@ -107,48 +114,55 @@ const Saved = () => {
         </div>
 
         <div className="p-4">
-          {savedPosts.length === 0 ? (
-            <div className="text-center py-12">
-              <Bookmark className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-20" />
-              <p className="text-muted-foreground">No saved posts yet</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Save posts to view them later
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-1">
-              {savedPosts.map((savedPost) => (
-                <Card
-                  key={savedPost.id}
-                  className="aspect-square overflow-hidden relative group cursor-pointer"
-                >
-                  {savedPost.posts.media_type.startsWith("image") ? (
-                    <img
-                      src={savedPost.posts.media_url}
-                      alt={savedPost.posts.caption || "Saved post"}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <video
-                      src={savedPost.posts.media_url}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <div className="text-white text-center text-sm">
-                      <div>❤️ {savedPost.posts.likes_count}</div>
-                      <div>💬 {savedPost.posts.comments_count}</div>
+          {savedPosts.length === 0
+            ? (
+              <div className="text-center py-12">
+                <Bookmark className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-20" />
+                <p className="text-muted-foreground">No saved posts yet</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Save posts to view them later
+                </p>
+              </div>
+            )
+            : (
+              <div className="grid grid-cols-3 gap-1">
+                {savedPosts.map((savedPost) => (
+                  <Card
+                    key={savedPost.id}
+                    className="aspect-square overflow-hidden relative group cursor-pointer"
+                  >
+                    {savedPost.posts.media_type.startsWith("image")
+                      ? (
+                        <img
+                          src={savedPost.posts.media_url}
+                          alt={savedPost.posts.caption || "Saved post"}
+                          className="w-full h-full object-cover"
+                        />
+                      )
+                      : (
+                        <video
+                          src={savedPost.posts.media_url}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="text-white text-center text-sm">
+                        <div>❤️ {savedPost.posts.likes_count}</div>
+                        <div>💬 {savedPost.posts.comments_count}</div>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
+                  </Card>
+                ))}
+              </div>
+            )}
         </div>
       </div>
-      
+
       {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
-      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
+      <BottomNav
+        onUploadClick={() => setShowUpload(true)}
+        userProfile={userProfile}
+      />
     </div>
   );
 };

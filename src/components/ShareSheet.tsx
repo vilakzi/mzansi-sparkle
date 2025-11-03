@@ -1,8 +1,13 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Copy, Twitter, Facebook, MessageCircle, Check } from "lucide-react";
+import { Check, Copy, Facebook, MessageCircle, Twitter } from "lucide-react";
 import { useState } from "react";
 
 type ShareSheetProps = {
@@ -37,7 +42,7 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
       toast.success("Link copied to clipboard");
       trackShare("copy_link");
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to copy link");
     }
   };
@@ -49,13 +54,19 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
 
     switch (platform) {
       case "twitter":
-        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+        shareUrl = `https://twitter.com/intent/tweet?url=${
+          encodeURIComponent(url)
+        }&text=${encodeURIComponent(text)}`;
         break;
       case "facebook":
-        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${
+          encodeURIComponent(url)
+        }`;
         break;
       case "whatsapp":
-        shareUrl = `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`;
+        shareUrl = `https://wa.me/?text=${
+          encodeURIComponent(text + " " + url)
+        }`;
         break;
     }
 
@@ -79,11 +90,9 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
             className="w-full justify-start gap-3 h-14"
             onClick={handleCopyLink}
           >
-            {copied ? (
-              <Check className="h-5 w-5 text-green-500" />
-            ) : (
-              <Copy className="h-5 w-5" />
-            )}
+            {copied
+              ? <Check className="h-5 w-5 text-green-500" />
+              : <Copy className="h-5 w-5" />}
             <div className="text-left">
               <div className="font-semibold">Copy Link</div>
               <div className="text-xs text-muted-foreground">
@@ -100,7 +109,9 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
             <Twitter className="h-5 w-5" />
             <div className="text-left">
               <div className="font-semibold">Twitter</div>
-              <div className="text-xs text-muted-foreground">Share on Twitter</div>
+              <div className="text-xs text-muted-foreground">
+                Share on Twitter
+              </div>
             </div>
           </Button>
 
@@ -112,7 +123,9 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
             <Facebook className="h-5 w-5" />
             <div className="text-left">
               <div className="font-semibold">Facebook</div>
-              <div className="text-xs text-muted-foreground">Share on Facebook</div>
+              <div className="text-xs text-muted-foreground">
+                Share on Facebook
+              </div>
             </div>
           </Button>
 
@@ -124,7 +137,9 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
             <MessageCircle className="h-5 w-5" />
             <div className="text-left">
               <div className="font-semibold">WhatsApp</div>
-              <div className="text-xs text-muted-foreground">Share on WhatsApp</div>
+              <div className="text-xs text-muted-foreground">
+                Share on WhatsApp
+              </div>
             </div>
           </Button>
         </div>

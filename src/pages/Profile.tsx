@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical, Edit, Trash2, MessageCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  MessageCircle,
+  MoreVertical,
+  Settings,
+  ShieldAlert,
+  Trash2,
+  UserMinus,
+  UserPlus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { FeedPost } from "@/components/FeedPost";
 import { ReportDialog } from "@/components/ReportDialog";
@@ -85,7 +95,7 @@ const Profile = () => {
             .eq("follower_id", user.id)
             .eq("following_id", profileData.id)
             .single();
-          
+
           setIsFollowing(!!followData);
         }
 
@@ -104,21 +114,28 @@ const Profile = () => {
 
         if (postsError) throw postsError;
 
-        const postsWithLikes = user?.id ? await Promise.all(
-          (postsData || []).map(async (post) => {
-            const { data: likeData } = await supabase
-              .from("post_likes")
-              .select("id")
-              .eq("post_id", post.id)
-              .eq("user_id", user.id)
-              .single();
-            
-            return { ...post, user_liked: !!likeData };
-          })
-        ) : (postsData || []).map(post => ({ ...post, user_liked: false }));
+        const postsWithLikes = user?.id
+          ? await Promise.all(
+            (postsData || []).map(async (post) => {
+              const { data: likeData } = await supabase
+                .from("post_likes")
+                .select("id")
+                .eq("post_id", post.id)
+                .eq("user_id", user.id)
+                .single();
+
+              return { ...post, user_liked: !!likeData };
+            }),
+          )
+          : (postsData || []).map((post) => ({ ...post, user_liked: false }));
 
         setPosts(postsWithLikes);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
         toast.error("Failed to load profile");
         console.error(error);
       } finally {
@@ -147,19 +164,28 @@ const Profile = () => {
       });
 
       toast.success(result.is_following ? "Following" : "Unfollowed");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update follow status");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update follow status",
+      );
     }
   };
 
   const handleDeletePost = async (postId: string) => {
     if (!currentUserId) return;
 
-    const post = posts.find(p => p.id === postId);
+    const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
     // Optimistically remove from UI
-    setPosts((current) => current.filter(p => p.id !== postId));
+    setPosts((current) => current.filter((p) => p.id !== postId));
 
     // Close the dialog
     setPostToDelete(null);
@@ -170,11 +196,14 @@ const Profile = () => {
         label: "Undo",
         onClick: () => {
           // Restore post to UI
-          setPosts((current) => [...current, post].sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          ));
+          setPosts((current) =>
+            [...current, post].sort((a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime()
+            )
+          );
           clearTimeout(deleteTimeoutId);
-        }
+        },
       },
       duration: 5000,
     });
@@ -183,21 +212,31 @@ const Profile = () => {
     const deleteTimeoutId = setTimeout(async () => {
       try {
         // Delete from database
-        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
-          p_post_id: postId
-        });
+        const { error: deleteError } = await supabase.rpc(
+          "delete_post_with_media",
+          {
+            p_post_id: postId,
+          },
+        );
 
         if (deleteError) throw deleteError;
 
         // Delete from storage
-        const storagePath = post.media_url.split('/').slice(-2).join('/');
-        await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
-        console.error('Error deleting post:', error);
+        const storagePath = post.media_url.split("/").slice(-2).join("/");
+        await supabase.storage.from("posts-media").remove([storagePath]);
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
+        console.error("Error deleting post:", error);
         // Restore post on error
-        setPosts((current) => [...current, post].sort((a, b) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ));
+        setPosts((current) =>
+          [...current, post].sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+        );
         toast.error("Failed to delete post");
       }
     }, 5000);
@@ -205,7 +244,7 @@ const Profile = () => {
 
   const refreshProfile = async () => {
     if (!username) return;
-    
+
     try {
       const { data: profileData } = await supabase
         .from("profiles")
@@ -217,7 +256,7 @@ const Profile = () => {
         setProfile(profileData);
       }
     } catch (error) {
-      console.error('Error refreshing profile:', error);
+      console.error("Error refreshing profile:", error);
     }
   };
 
@@ -245,45 +284,58 @@ const Profile = () => {
             </Button>
             <h1 className="text-xl font-semibold">{profile.username}</h1>
           </div>
-          {isOwnProfile ? (
-            <div className="flex gap-2">
-              <Button variant="ghost" size="icon" onClick={() => setShowEditProfile(true)}>
-                <Edit className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
-                <Settings className="h-5 w-5" />
-              </Button>
-            </div>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-5 w-5" />
+          {isOwnProfile
+            ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowEditProfile(true)}
+                >
+                  <Edit className="h-5 w-5" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowReport(true)}>
-                  Report User
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
-                  if (!currentUserId) return;
-                  const { error } = await supabase.from("blocked_users").insert({
-                    blocker_id: currentUserId,
-                    blocked_id: profile.id,
-                  });
-                  if (!error) {
-                    setIsBlocked(true);
-                    toast.success("User blocked");
-                  }
-                }}>
-                  <ShieldAlert className="h-4 w-4 mr-2" />
-                  Block User
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate("/settings")}
+                >
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </div>
+            )
+            : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <MoreVertical className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setShowReport(true)}>
+                    Report User
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      if (!currentUserId) return;
+                      const { error } = await supabase.from("blocked_users")
+                        .insert({
+                          blocker_id: currentUserId,
+                          blocked_id: profile.id,
+                        });
+                      if (!error) {
+                        setIsBlocked(true);
+                        toast.success("User blocked");
+                      }
+                    }}
+                  >
+                    <ShieldAlert className="h-4 w-4 mr-2" />
+                    Block User
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
         </div>
-        
+
         <ReportDialog
           isOpen={showReport}
           onClose={() => setShowReport(false)}
@@ -299,12 +351,16 @@ const Profile = () => {
           />
         )}
 
-        <AlertDialog open={!!postToDelete} onOpenChange={() => setPostToDelete(null)}>
+        <AlertDialog
+          open={!!postToDelete}
+          onOpenChange={() => setPostToDelete(null)}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Post</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete this post? This action cannot be undone.
+                Are you sure you want to delete this post? This action cannot be
+                undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -338,22 +394,24 @@ const Profile = () => {
                 <h2 className="text-2xl font-bold">{profile.display_name}</h2>
                 {!isOwnProfile && currentUserId && (
                   <>
-                    <Button 
+                    <Button
                       onClick={handleFollow}
                       variant={isFollowing ? "outline" : "default"}
                       size="sm"
                     >
-                      {isFollowing ? (
-                        <>
-                          <UserMinus className="h-4 w-4 mr-1" />
-                          Unfollow
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4 mr-1" />
-                          Follow
-                        </>
-                      )}
+                      {isFollowing
+                        ? (
+                          <>
+                            <UserMinus className="h-4 w-4 mr-1" />
+                            Unfollow
+                          </>
+                        )
+                        : (
+                          <>
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            Follow
+                          </>
+                        )}
                     </Button>
                     {profile.whatsapp_number && (
                       <WhatsAppButton
@@ -373,11 +431,15 @@ const Profile = () => {
                   <span className="text-muted-foreground ml-1">posts</span>
                 </div>
                 <div>
-                  <span className="font-semibold">{profile.followers_count}</span>
+                  <span className="font-semibold">
+                    {profile.followers_count}
+                  </span>
                   <span className="text-muted-foreground ml-1">followers</span>
                 </div>
                 <div>
-                  <span className="font-semibold">{profile.following_count}</span>
+                  <span className="font-semibold">
+                    {profile.following_count}
+                  </span>
                   <span className="text-muted-foreground ml-1">following</span>
                 </div>
               </div>
@@ -390,27 +452,29 @@ const Profile = () => {
             <TabsList className="w-full">
               <TabsTrigger value="posts" className="flex-1">Posts</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="posts" className="mt-6">
               <div className="grid grid-cols-3 gap-1">
                 {posts.map((post) => (
                   <div key={post.id} className="relative group">
-                    <Card 
+                    <Card
                       className="aspect-square overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() => {/* Could open post modal */}}
                     >
-                      {post.media_type.startsWith("image") ? (
-                        <img 
-                          src={post.media_url} 
-                          alt={post.caption || "Post"} 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <video 
-                          src={post.media_url} 
-                          className="w-full h-full object-cover"
-                        />
-                      )}
+                      {post.media_type.startsWith("image")
+                        ? (
+                          <img
+                            src={post.media_url}
+                            alt={post.caption || "Post"}
+                            className="w-full h-full object-cover"
+                          />
+                        )
+                        : (
+                          <video
+                            src={post.media_url}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
                     </Card>
                     {isOwnProfile && (
                       <Button
@@ -428,9 +492,11 @@ const Profile = () => {
                   </div>
                 ))}
               </div>
-              
+
               {posts.length === 0 && (
-                <p className="text-center text-muted-foreground py-12">No posts yet</p>
+                <p className="text-center text-muted-foreground py-12">
+                  No posts yet
+                </p>
               )}
             </TabsContent>
           </Tabs>

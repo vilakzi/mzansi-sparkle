@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
@@ -30,7 +30,9 @@ const Notifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
+  const [userProfile, setUserProfile] = useState<
+    { username: string } | undefined
+  >();
 
   useEffect(() => {
     fetchNotifications();
@@ -90,7 +92,12 @@ const Notifications = () => {
         .update({ read: true })
         .eq("user_id", user.id)
         .eq("read", false);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching notifications:", error);
       toast.error("Failed to load notifications");
     } finally {
@@ -152,58 +159,70 @@ const Notifications = () => {
         </div>
 
         <div className="p-4 space-y-2">
-          {notifications.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">No notifications yet</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                We'll notify you when someone interacts with your posts
-              </p>
-            </div>
-          ) : (
-            notifications.map((notification) => (
-              <Card
-                key={notification.id}
-                className={cn(
-                  "p-4 cursor-pointer hover:bg-accent transition-colors",
-                  !notification.read && "bg-primary/5"
-                )}
-                onClick={() => handleNotificationClick(notification)}
-              >
-                <div className="flex gap-3">
-                  <Avatar className="h-12 w-12 flex-shrink-0">
-                    <AvatarImage src={notification.actor.avatar_url || undefined} />
-                    <AvatarFallback>
-                      {notification.actor.display_name[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+          {notifications.length === 0
+            ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No notifications yet</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  We'll notify you when someone interacts with your posts
+                </p>
+              </div>
+            )
+            : (
+              notifications.map((notification) => (
+                <Card
+                  key={notification.id}
+                  className={cn(
+                    "p-4 cursor-pointer hover:bg-accent transition-colors",
+                    !notification.read && "bg-primary/5",
+                  )}
+                  onClick={() => handleNotificationClick(notification)}
+                >
+                  <div className="flex gap-3">
+                    <Avatar className="h-12 w-12 flex-shrink-0">
+                      <AvatarImage
+                        src={notification.actor.avatar_url || undefined}
+                      />
+                      <AvatarFallback>
+                        {notification.actor.display_name[0].toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <p className="text-sm">
-                          <span className="font-semibold">
-                            {notification.actor.username}
-                          </span>{" "}
-                          {getNotificationText(notification).split(notification.actor.username)[1]}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDistanceToNow(new Date(notification.created_at), {
-                            addSuffix: true,
-                          })}
-                        </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1">
+                          <p className="text-sm">
+                            <span className="font-semibold">
+                              {notification.actor.username}
+                            </span>{" "}
+                            {getNotificationText(notification).split(
+                              notification.actor.username,
+                            )[1]}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatDistanceToNow(
+                              new Date(notification.created_at),
+                              {
+                                addSuffix: true,
+                              },
+                            )}
+                          </p>
+                        </div>
+                        {getNotificationIcon(notification.type)}
                       </div>
-                      {getNotificationIcon(notification.type)}
                     </div>
                   </div>
-                </div>
-              </Card>
-            ))
-          )}
+                </Card>
+              ))
+            )}
         </div>
       </div>
-      
+
       {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
-      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
+      <BottomNav
+        onUploadClick={() => setShowUpload(true)}
+        userProfile={userProfile}
+      />
     </div>
   );
 };

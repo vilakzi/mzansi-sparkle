@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
 import { toast } from "sonner";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
-import { RefreshCw, ArrowUp } from "lucide-react";
+import { ArrowUp, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import fetchFeed from "@/services/feed";
 
@@ -80,7 +80,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           loadMore();
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.5 },
     );
 
     if (lastPostRef.current) {
@@ -146,7 +146,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           bio: post.bio,
           followers_count: post.followers_count,
           following_count: post.following_count,
-        }
+        },
       }));
 
       if (isRefresh) {
@@ -163,8 +163,13 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
-    } catch (error: any) {
-      console.error('Feed fetch error:', error);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
+      console.error("Feed fetch error:", error);
       toast.error("Failed to load posts");
 
       setLoading(false);
@@ -202,7 +207,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         },
         async (payload) => {
           setNewPostsCount((prev) => prev + 1);
-        }
+        },
       )
       .subscribe();
 
@@ -279,7 +284,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       return;
     }
 
-    const post = posts.find(p => p.id === postId);
+    const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
     try {
@@ -306,7 +311,12 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           p.id === postId ? { ...p, is_saved: !p.is_saved } : p
         )
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       toast.error("Failed to save post");
       if (import.meta.env.DEV) {
         console.error(error);
@@ -315,16 +325,18 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   };
 
   const handleDeletePost = async (postId: string) => {
-    const post = posts.find(p => p.id === postId);
+    const post = posts.find((p) => p.id === postId);
     if (!post) return;
-    setPosts((current) => current.filter(p => p.id !== postId));
+    setPosts((current) => current.filter((p) => p.id !== postId));
     const undoToastId = toast.success("Post deleted", {
       action: {
         label: "Undo",
         onClick: () => {
           setPosts((current) => {
             const newPosts = [...current];
-            const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
+            const insertIndex = current.findIndex((p) =>
+              new Date(p.created_at) < new Date(post.created_at)
+            );
             if (insertIndex === -1) {
               newPosts.push(post);
             } else {
@@ -333,24 +345,34 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             return newPosts;
           });
           clearTimeout(deleteTimeoutId);
-        }
+        },
       },
       duration: 5000,
     });
     const deleteTimeoutId = setTimeout(async () => {
       try {
-        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
-          p_post_id: postId
-        });
+        const { error: deleteError } = await supabase.rpc(
+          "delete_post_with_media",
+          {
+            p_post_id: postId,
+          },
+        );
 
         if (deleteError) throw deleteError;
-        const storagePath = post.media_url.split('/').slice(-2).join('/');
-        await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
-        console.error('Error deleting post:', error);
+        const storagePath = post.media_url.split("/").slice(-2).join("/");
+        await supabase.storage.from("posts-media").remove([storagePath]);
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+        } else {
+          console.error(String(error));
+        }
+        console.error("Error deleting post:", error);
         setPosts((current) => {
           const newPosts = [...current];
-          const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
+          const insertIndex = current.findIndex((p) =>
+            new Date(p.created_at) < new Date(post.created_at)
+          );
           if (insertIndex === -1) {
             newPosts.push(post);
           } else {
@@ -379,7 +401,9 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
-            <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-5 w-5 ${isRefreshing ? "animate-spin" : ""}`}
+            />
           </Button>
         </div>
         {/* New Posts Banner */}
@@ -395,7 +419,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
               }}
             >
               <ArrowUp className="h-4 w-4 mr-1" />
-              {newPostsCount} new {newPostsCount === 1 ? 'post' : 'posts'}
+              {newPostsCount} new {newPostsCount === 1 ? "post" : "posts"}
             </Button>
           </div>
         )}
@@ -406,80 +430,83 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           ref={containerRef}
           className="h-full w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide scroll-smooth"
           onScroll={handleScroll}
-          style={{ scrollSnapType: 'y mandatory' }}
+          style={{ scrollSnapType: "y mandatory" }}
         >
-          {posts.length === 0 ? (
-            <div className="flex h-full items-center justify-center p-8">
-              <div className="text-center space-y-4">
-                <p className="text-muted-foreground mb-4">
-                  No posts yet
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Discover amazing content
-                </p>
-                <Button onClick={handleRefresh} variant="outline">
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh Feed
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {posts.map((post, index) => {
-                const distanceFromCurrent = Math.abs(index - currentIndex);
-                const isInVisibleRange = distanceFromCurrent <= VISIBLE_RANGE;
-                return (
-                  <div
-                    key={`${post.id}-${index}`}
-                    ref={index === posts.length - 5 ? lastPostRef : null}
-                    className="snap-start snap-always"
-                    style={{
-                      display: isInVisibleRange ? 'block' : 'none',
-                      opacity: isInVisibleRange ? 1 : 0,
-                      pointerEvents: isInVisibleRange ? 'auto' : 'none',
-                    }}
-                  >
-                    <FeedPost
-                      id={post.id}
-                      mediaUrl={post.media_url}
-                      mediaType={post.media_type}
-                      caption={post.caption}
-                      likesCount={post.likes_count}
-                      commentsCount={post.comments_count}
-                      sharesCount={post.shares_count}
-                      isSaved={post.is_saved || false}
-                      isLiked={post.is_liked || false}
-                      isActive={index === currentIndex}
-                      isPrevious={index === currentIndex - 1}
-                      isNext={index === currentIndex + 1}
-                      nextVideoUrl={
-                        index === currentIndex && posts[index + 1]?.media_type === 'video'
-                          ? posts[index + 1]?.media_url
-                          : undefined
-                      }
-                      onLike={() => handleLike(post.id)}
-                      onSaveToggle={() => handleSaveToggle(post.id)}
-                      onDelete={() => handleDeletePost(post.id)}
-                      profile={{ 
-                        display_name: post.display_name, 
-                        username: post.username, 
-                        avatar_url: post.avatar_url 
-                      }}
-                      userId={post.user_id}
-                    />
-                  </div>
-                );
-              })}
-              {loadingMore && (
-                <div className="flex h-screen items-center justify-center snap-start">
-                  <div className="text-center space-y-4">
-                    <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
-                    <p className="text-muted-foreground">Loading more amazing content...</p>
-                  </div>
+          {posts.length === 0
+            ? (
+              <div className="flex h-full items-center justify-center p-8">
+                <div className="text-center space-y-4">
+                  <p className="text-muted-foreground mb-4">
+                    No posts yet
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Discover amazing content
+                  </p>
+                  <Button onClick={handleRefresh} variant="outline">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh Feed
+                  </Button>
                 </div>
-              )}
-            </>
-          )}
+              </div>
+            )
+            : (
+              <>
+                {posts.map((post, index) => {
+                  const distanceFromCurrent = Math.abs(index - currentIndex);
+                  const isInVisibleRange = distanceFromCurrent <= VISIBLE_RANGE;
+                  return (
+                    <div
+                      key={`${post.id}-${index}`}
+                      ref={index === posts.length - 5 ? lastPostRef : null}
+                      className="snap-start snap-always"
+                      style={{
+                        display: isInVisibleRange ? "block" : "none",
+                        opacity: isInVisibleRange ? 1 : 0,
+                        pointerEvents: isInVisibleRange ? "auto" : "none",
+                      }}
+                    >
+                      <FeedPost
+                        id={post.id}
+                        mediaUrl={post.media_url}
+                        mediaType={post.media_type}
+                        caption={post.caption}
+                        likesCount={post.likes_count}
+                        commentsCount={post.comments_count}
+                        sharesCount={post.shares_count}
+                        isSaved={post.is_saved || false}
+                        isLiked={post.is_liked || false}
+                        isActive={index === currentIndex}
+                        isPrevious={index === currentIndex - 1}
+                        isNext={index === currentIndex + 1}
+                        nextVideoUrl={index === currentIndex &&
+                            posts[index + 1]?.media_type === "video"
+                          ? posts[index + 1]?.media_url
+                          : undefined}
+                        onLike={() => handleLike(post.id)}
+                        onSaveToggle={() => handleSaveToggle(post.id)}
+                        onDelete={() => handleDeletePost(post.id)}
+                        profile={{
+                          display_name: post.display_name,
+                          username: post.username,
+                          avatar_url: post.avatar_url,
+                        }}
+                        userId={post.user_id}
+                      />
+                    </div>
+                  );
+                })}
+                {loadingMore && (
+                  <div className="flex h-screen items-center justify-center snap-start">
+                    <div className="text-center space-y-4">
+                      <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
+                      <p className="text-muted-foreground">
+                        Loading more amazing content...
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
         </div>
       </div>
     </div>

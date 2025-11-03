@@ -29,10 +29,14 @@ type TrendingHashtag = {
 const Trending = () => {
   const navigate = useNavigate();
   const [trendingPosts, setTrendingPosts] = useState<TrendingPost[]>([]);
-  const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>([]);
+  const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
+  const [userProfile, setUserProfile] = useState<
+    { username: string } | undefined
+  >();
 
   useEffect(() => {
     fetchTrending();
@@ -64,7 +68,9 @@ const Trending = () => {
 
       const { data: postsData, error: postsError } = await supabase
         .from("posts")
-        .select("id, media_url, media_type, caption, likes_count, comments_count, views_count")
+        .select(
+          "id, media_url, media_type, caption, likes_count, comments_count, views_count",
+        )
         .gte("created_at", sevenDaysAgo.toISOString())
         .order("created_at", { ascending: false })
         .limit(100);
@@ -72,9 +78,10 @@ const Trending = () => {
       if (postsError) throw postsError;
 
       // Calculate engagement score and sort
-      const postsWithScore = (postsData || []).map(post => ({
+      const postsWithScore = (postsData || []).map((post) => ({
         ...post,
-        engagement_score: (post.likes_count * 3) + (post.comments_count * 2) + post.views_count
+        engagement_score: (post.likes_count * 3) + (post.comments_count * 2) +
+          post.views_count,
       })).sort((a, b) => b.engagement_score - a.engagement_score).slice(0, 50);
 
       setTrendingPosts(postsWithScore);
@@ -88,7 +95,12 @@ const Trending = () => {
 
       if (hashtagsError) throw hashtagsError;
       setTrendingHashtags(hashtagsData || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching trending:", error);
       toast.error("Failed to load trending content");
     } finally {
@@ -124,78 +136,87 @@ const Trending = () => {
           </TabsList>
 
           <TabsContent value="posts" className="mt-4">
-            {trendingPosts.length === 0 ? (
-              <p className="text-center text-muted-foreground py-12">
-                No trending posts yet
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-1">
-                {trendingPosts.map((post) => (
-                  <Card
-                    key={post.id}
-                    className="aspect-square overflow-hidden relative group cursor-pointer"
-                  >
-                    {post.media_type.startsWith("image") ? (
-                      <img
-                        src={post.media_url}
-                        alt={post.caption || "Trending post"}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <video
-                        src={post.media_url}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="text-white text-center text-sm">
-                        <div>❤️ {post.likes_count}</div>
-                        <div>💬 {post.comments_count}</div>
-                        <div>👁️ {post.views_count}</div>
+            {trendingPosts.length === 0
+              ? (
+                <p className="text-center text-muted-foreground py-12">
+                  No trending posts yet
+                </p>
+              )
+              : (
+                <div className="grid grid-cols-3 gap-1">
+                  {trendingPosts.map((post) => (
+                    <Card
+                      key={post.id}
+                      className="aspect-square overflow-hidden relative group cursor-pointer"
+                    >
+                      {post.media_type.startsWith("image")
+                        ? (
+                          <img
+                            src={post.media_url}
+                            alt={post.caption || "Trending post"}
+                            className="w-full h-full object-cover"
+                          />
+                        )
+                        : (
+                          <video
+                            src={post.media_url}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="text-white text-center text-sm">
+                          <div>❤️ {post.likes_count}</div>
+                          <div>💬 {post.comments_count}</div>
+                          <div>👁️ {post.views_count}</div>
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+                    </Card>
+                  ))}
+                </div>
+              )}
           </TabsContent>
 
           <TabsContent value="hashtags" className="space-y-3 mt-4">
-            {trendingHashtags.length === 0 ? (
-              <p className="text-center text-muted-foreground py-12">
-                No trending hashtags yet
-              </p>
-            ) : (
-              trendingHashtags.map((hashtag, index) => (
-                <Card
-                  key={hashtag.id}
-                  className="p-4 cursor-pointer hover:bg-accent transition-colors"
-                  onClick={() => navigate(`/hashtag/${hashtag.name}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="text-2xl font-bold text-muted-foreground w-8">
-                      {index + 1}
-                    </div>
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Hash className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-semibold">#{hashtag.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {hashtag.posts_count} posts
+            {trendingHashtags.length === 0
+              ? (
+                <p className="text-center text-muted-foreground py-12">
+                  No trending hashtags yet
+                </p>
+              )
+              : (
+                trendingHashtags.map((hashtag, index) => (
+                  <Card
+                    key={hashtag.id}
+                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                    onClick={() => navigate(`/hashtag/${hashtag.name}`)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl font-bold text-muted-foreground w-8">
+                        {index + 1}
                       </div>
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Hash className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold">#{hashtag.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {hashtag.posts_count} posts
+                        </div>
+                      </div>
+                      <TrendingUp className="h-5 w-5 text-primary" />
                     </div>
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                  </div>
-                </Card>
-              ))
-            )}
+                  </Card>
+                ))
+              )}
           </TabsContent>
         </Tabs>
       </div>
-      
+
       {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
-      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
+      <BottomNav
+        onUploadClick={() => setShowUpload(true)}
+        userProfile={userProfile}
+      />
     </div>
   );
 };

@@ -1,12 +1,17 @@
-import { useState, useEffect } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useEffect, useState } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Send, Reply } from "lucide-react";
+import { Reply, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
 
@@ -30,7 +35,9 @@ type CommentSheetProps = {
   onClose: () => void;
 };
 
-export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => {
+export const CommentSheet = (
+  { postId, isOpen, onClose }: CommentSheetProps,
+) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -90,7 +97,12 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       });
 
       setComments(rootComments);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching comments:", error);
       toast.error("Failed to load comments");
     }
@@ -120,7 +132,12 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       setReplyingTo(null);
       toast.success("Comment posted");
       fetchComments();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error posting comment:", error);
       toast.error("Failed to post comment");
     } finally {
@@ -128,20 +145,24 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
     }
   };
 
-  const CommentItem = ({ comment, depth = 0 }: { comment: Comment; depth?: number }) => (
+  const CommentItem = (
+    { comment, depth = 0 }: { comment: Comment; depth?: number },
+  ) => (
     <div className={`${depth > 0 ? "ml-8 mt-3" : "mt-4"}`}>
       <div className="flex gap-3">
-        <Avatar 
+        <Avatar
           className="h-8 w-8 cursor-pointer flex-shrink-0"
           onClick={() => navigate(`/profile/${comment.profile.username}`)}
         >
           <AvatarImage src={comment.profile.avatar_url || undefined} />
-          <AvatarFallback>{comment.profile.display_name[0].toUpperCase()}</AvatarFallback>
+          <AvatarFallback>
+            {comment.profile.display_name[0].toUpperCase()}
+          </AvatarFallback>
         </Avatar>
-        
+
         <div className="flex-1 min-w-0">
           <div className="bg-muted rounded-lg p-3">
-            <div 
+            <div
               className="font-semibold text-sm cursor-pointer hover:underline"
               onClick={() => navigate(`/profile/${comment.profile.username}`)}
             >
@@ -149,9 +170,13 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
             </div>
             <p className="text-sm mt-1 break-words">{comment.content}</p>
           </div>
-          
+
           <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-            <span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
+            <span>
+              {formatDistanceToNow(new Date(comment.created_at), {
+                addSuffix: true,
+              })}
+            </span>
             <button
               onClick={() => setReplyingTo(comment.id)}
               className="flex items-center gap-1 hover:text-foreground"
@@ -182,17 +207,19 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
 
         <div className="flex flex-col h-full mt-4">
           <ScrollArea className="flex-1 pr-4">
-            {comments.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                No comments yet. Be the first to comment!
-              </p>
-            ) : (
-              <div className="pb-4">
-                {comments.map((comment) => (
-                  <CommentItem key={comment.id} comment={comment} />
-                ))}
-              </div>
-            )}
+            {comments.length === 0
+              ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No comments yet. Be the first to comment!
+                </p>
+              )
+              : (
+                <div className="pb-4">
+                  {comments.map((comment) => (
+                    <CommentItem key={comment.id} comment={comment} />
+                  ))}
+                </div>
+              )}
           </ScrollArea>
 
           <div className="border-t pt-4 mt-4">
@@ -208,7 +235,7 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
                 </Button>
               </div>
             )}
-            
+
             <div className="flex gap-2">
               <Textarea
                 placeholder="Write a comment..."

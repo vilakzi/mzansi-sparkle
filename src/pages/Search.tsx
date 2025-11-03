@@ -3,12 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
 import { UploadButton } from "@/components/UploadButton";
-import { Search as SearchIcon, TrendingUp, Hash, ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  Hash,
+  Search as SearchIcon,
+  TrendingUp,
+} from "lucide-react";
 import { toast } from "sonner";
 
 type Profile = {
@@ -42,7 +47,9 @@ const Search = () => {
   const [hashtags, setHashtags] = useState<Hashtag[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [showUpload, setShowUpload] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
+  const [userProfile, setUserProfile] = useState<
+    { username: string } | undefined
+  >();
 
   useEffect(() => {
     fetchUserProfile();
@@ -88,7 +95,9 @@ const Search = () => {
       setUsers(usersData || []);
 
       // Search hashtags
-      const hashtagQuery = searchTerm.startsWith("#") ? searchTerm.substring(1) : searchTerm;
+      const hashtagQuery = searchTerm.startsWith("#")
+        ? searchTerm.substring(1)
+        : searchTerm;
       const { data: hashtagsData, error: hashtagsError } = await supabase
         .from("hashtags")
         .select("id, name, posts_count")
@@ -102,14 +111,21 @@ const Search = () => {
       // Search posts by caption
       const { data: postsData, error: postsError } = await supabase
         .from("posts")
-        .select("id, media_url, media_type, caption, likes_count, comments_count")
+        .select(
+          "id, media_url, media_type, caption, likes_count, comments_count",
+        )
         .ilike("caption", `%${searchTerm}%`)
         .order("created_at", { ascending: false })
         .limit(20);
 
       if (postsError) throw postsError;
       setPosts(postsData || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Search error:", error);
       toast.error("Search failed");
     } finally {
@@ -132,7 +148,7 @@ const Search = () => {
             </Button>
             <h1 className="text-xl font-semibold">Search</h1>
           </div>
-          
+
           <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -144,108 +160,145 @@ const Search = () => {
           </div>
         </div>
 
-        {query ? (
-          <Tabs defaultValue="users" className="p-4">
-            <TabsList className="w-full grid grid-cols-3">
-              <TabsTrigger value="users">Users</TabsTrigger>
-              <TabsTrigger value="hashtags">Hashtags</TabsTrigger>
-              <TabsTrigger value="posts">Posts</TabsTrigger>
-            </TabsList>
+        {query
+          ? (
+            <Tabs defaultValue="users" className="p-4">
+              <TabsList className="w-full grid grid-cols-3">
+                <TabsTrigger value="users">Users</TabsTrigger>
+                <TabsTrigger value="hashtags">Hashtags</TabsTrigger>
+                <TabsTrigger value="posts">Posts</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="users" className="space-y-3 mt-4">
-              {loading ? (
-                <p className="text-center text-muted-foreground py-8">Searching...</p>
-              ) : users.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No users found</p>
-              ) : (
-                users.map((user) => (
-                  <Card
-                    key={user.id}
-                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => navigate(`/profile/${user.username}`)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={user.avatar_url || undefined} />
-                        <AvatarFallback>{user.display_name[0].toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-semibold">{user.username}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {user.display_name} · {user.followers_count} followers
+              <TabsContent value="users" className="space-y-3 mt-4">
+                {loading
+                  ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      Searching...
+                    </p>
+                  )
+                  : users.length === 0
+                  ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      No users found
+                    </p>
+                  )
+                  : (
+                    users.map((user) => (
+                      <Card
+                        key={user.id}
+                        className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                        onClick={() => navigate(`/profile/${user.username}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-12 w-12">
+                            <AvatarImage src={user.avatar_url || undefined} />
+                            <AvatarFallback>
+                              {user.display_name[0].toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-semibold">{user.username}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {user.display_name} · {user.followers_count}{" "}
+                              followers
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </TabsContent>
+                      </Card>
+                    ))
+                  )}
+              </TabsContent>
 
-            <TabsContent value="hashtags" className="space-y-3 mt-4">
-              {loading ? (
-                <p className="text-center text-muted-foreground py-8">Searching...</p>
-              ) : hashtags.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No hashtags found</p>
-              ) : (
-                hashtags.map((hashtag) => (
-                  <Card
-                    key={hashtag.id}
-                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => navigate(`/hashtag/${hashtag.name}`)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Hash className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <div className="font-semibold">#{hashtag.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {hashtag.posts_count} posts
+              <TabsContent value="hashtags" className="space-y-3 mt-4">
+                {loading
+                  ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      Searching...
+                    </p>
+                  )
+                  : hashtags.length === 0
+                  ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      No hashtags found
+                    </p>
+                  )
+                  : (
+                    hashtags.map((hashtag) => (
+                      <Card
+                        key={hashtag.id}
+                        className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                        onClick={() => navigate(`/hashtag/${hashtag.name}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Hash className="h-6 w-6 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-semibold">#{hashtag.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {hashtag.posts_count} posts
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </TabsContent>
+                      </Card>
+                    ))
+                  )}
+              </TabsContent>
 
-            <TabsContent value="posts" className="mt-4">
-              {loading ? (
-                <p className="text-center text-muted-foreground py-8">Searching...</p>
-              ) : posts.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No posts found</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-1">
-                  {posts.map((post) => (
-                    <Card key={post.id} className="aspect-square overflow-hidden">
-                      {post.media_type.startsWith("image") ? (
-                        <img
-                          src={post.media_url}
-                          alt={post.caption || "Post"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <video
-                          src={post.media_url}
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        ) : (
-          <div className="p-4 text-center text-muted-foreground">
-            <SearchIcon className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p>Search for users, hashtags, or content</p>
-          </div>
-        )}
+              <TabsContent value="posts" className="mt-4">
+                {loading
+                  ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      Searching...
+                    </p>
+                  )
+                  : posts.length === 0
+                  ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      No posts found
+                    </p>
+                  )
+                  : (
+                    <div className="grid grid-cols-3 gap-1">
+                      {posts.map((post) => (
+                        <Card
+                          key={post.id}
+                          className="aspect-square overflow-hidden"
+                        >
+                          {post.media_type.startsWith("image")
+                            ? (
+                              <img
+                                src={post.media_url}
+                                alt={post.caption || "Post"}
+                                className="w-full h-full object-cover"
+                              />
+                            )
+                            : (
+                              <video
+                                src={post.media_url}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+              </TabsContent>
+            </Tabs>
+          )
+          : (
+            <div className="p-4 text-center text-muted-foreground">
+              <SearchIcon className="h-12 w-12 mx-auto mb-4 opacity-20" />
+              <p>Search for users, hashtags, or content</p>
+            </div>
+          )}
       </div>
-      
+
       {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
-      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
+      <BottomNav
+        onUploadClick={() => setShowUpload(true)}
+        userProfile={userProfile}
+      />
     </div>
   );
 };

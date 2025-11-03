@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Heart, MessageCircle, Share2, Bookmark, ArrowLeft } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  ArrowLeft,
+  Bookmark,
+  Heart,
+  MessageCircle,
+  Share2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CommentSheet } from "@/components/CommentSheet";
@@ -82,7 +88,7 @@ const PostDetail = () => {
             .select("id")
             .eq("post_id", id)
             .eq("user_id", user.id)
-            .single()
+            .single(),
         ]);
 
         setPost({
@@ -99,7 +105,12 @@ const PostDetail = () => {
           profile: postData.profiles,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching post:", error);
       toast.error("Failed to load post");
     } finally {
@@ -157,7 +168,12 @@ const PostDetail = () => {
       }
 
       setPost({ ...post, user_saved: !post.user_saved });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       toast.error("Failed to save post");
     }
   };
@@ -204,31 +220,45 @@ const PostDetail = () => {
                 {post.profile.username}
               </div>
               <div className="text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                {formatDistanceToNow(new Date(post.created_at), {
+                  addSuffix: true,
+                })}
               </div>
             </div>
           </div>
 
           {/* Media */}
           <div className="aspect-square bg-black">
-            {post.media_type.startsWith("image") ? (
-              <img
-                src={post.media_url}
-                alt={post.caption || "Post"}
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <video src={post.media_url} controls className="w-full h-full object-contain" />
-            )}
+            {post.media_type.startsWith("image")
+              ? (
+                <img
+                  src={post.media_url}
+                  alt={post.caption || "Post"}
+                  className="w-full h-full object-contain"
+                />
+              )
+              : (
+                <video
+                  src={post.media_url}
+                  controls
+                  className="w-full h-full object-contain"
+                />
+              )}
           </div>
 
           {/* Actions */}
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
-                <button onClick={handleLike} className="flex items-center gap-2">
+                <button
+                  onClick={handleLike}
+                  className="flex items-center gap-2"
+                >
                   <Heart
-                    className={cn("h-6 w-6", post.user_liked && "fill-red-500 text-red-500")}
+                    className={cn(
+                      "h-6 w-6",
+                      post.user_liked && "fill-red-500 text-red-500",
+                    )}
                   />
                   <span className="font-semibold">{post.likes_count}</span>
                 </button>
@@ -241,14 +271,19 @@ const PostDetail = () => {
                   <span className="font-semibold">{post.comments_count}</span>
                 </button>
 
-                <button onClick={() => setShowShare(true)} className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowShare(true)}
+                  className="flex items-center gap-2"
+                >
                   <Share2 className="h-6 w-6" />
                   <span className="font-semibold">{post.shares_count}</span>
                 </button>
               </div>
 
               <button onClick={handleSaveToggle}>
-                <Bookmark className={cn("h-6 w-6", post.user_saved && "fill-current")} />
+                <Bookmark
+                  className={cn("h-6 w-6", post.user_saved && "fill-current")}
+                />
               </button>
             </div>
 
@@ -273,7 +308,11 @@ const PostDetail = () => {
           onClose={() => setShowComments(false)}
         />
 
-        <ShareSheet postId={post.id} isOpen={showShare} onClose={() => setShowShare(false)} />
+        <ShareSheet
+          postId={post.id}
+          isOpen={showShare}
+          onClose={() => setShowShare(false)}
+        />
       </div>
     </div>
   );

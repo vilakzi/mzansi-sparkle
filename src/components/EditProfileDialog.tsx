@@ -1,23 +1,23 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { AvatarUpload } from './AvatarUpload';
-import { useUsernameAvailability } from '@/hooks/useUsernameAvailability';
-import { resizeImage } from '@/lib/imageProcessing';
-import { toast } from '@/hooks/use-toast';
-import { Loader2, Check, X, AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { AvatarUpload } from "./AvatarUpload";
+import { useUsernameAvailability } from "@/hooks/useUsernameAvailability";
+import { resizeImage } from "@/lib/imageProcessing";
+import { toast } from "@/hooks/use-toast";
+import { AlertCircle, Check, Loader2, X } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Profile {
   id: string;
@@ -45,20 +45,26 @@ export function EditProfileDialog({
   const [loading, setLoading] = useState(false);
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [username, setUsername] = useState(profile.username);
-  const [bio, setBio] = useState(profile.bio || '');
-  const [whatsappNumber, setWhatsappNumber] = useState(profile.whatsapp_number || '');
+  const [bio, setBio] = useState(profile.bio || "");
+  const [whatsappNumber, setWhatsappNumber] = useState(
+    profile.whatsapp_number || "",
+  );
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>('');
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
-  const { isChecking, isAvailable, error: usernameError } = useUsernameAvailability(
-    username,
-    profile.id
-  );
+  const { isChecking, isAvailable, error: usernameError } =
+    useUsernameAvailability(
+      username,
+      profile.id,
+    );
 
   // Calculate username cooldown
-  const daysSinceLastChange = profile.username_updated_at 
-    ? Math.floor((Date.now() - new Date(profile.username_updated_at).getTime()) / (1000 * 60 * 60 * 24))
+  const daysSinceLastChange = profile.username_updated_at
+    ? Math.floor(
+      (Date.now() - new Date(profile.username_updated_at).getTime()) /
+        (1000 * 60 * 60 * 24),
+    )
     : Infinity;
 
   const canChangeUsername = daysSinceLastChange >= 30;
@@ -70,10 +76,10 @@ export function EditProfileDialog({
     if (open) {
       setDisplayName(profile.display_name);
       setUsername(profile.username);
-      setBio(profile.bio || '');
-      setWhatsappNumber(profile.whatsapp_number || '');
+      setBio(profile.bio || "");
+      setWhatsappNumber(profile.whatsapp_number || "");
       setAvatarFile(null);
-      setAvatarPreview('');
+      setAvatarPreview("");
       setRemoveAvatar(false);
     }
   }, [open, profile]);
@@ -86,25 +92,25 @@ export function EditProfileDialog({
 
   const handleRemoveImage = () => {
     setAvatarFile(null);
-    setAvatarPreview('');
+    setAvatarPreview("");
     setRemoveAvatar(true);
   };
 
   const handleSave = async () => {
     if (!displayName.trim()) {
       toast({
-        title: 'Error',
-        description: 'Display name is required',
-        variant: 'destructive',
+        title: "Error",
+        description: "Display name is required",
+        variant: "destructive",
       });
       return;
     }
 
     if (username.trim().length < 3) {
       toast({
-        title: 'Error',
-        description: 'Username must be at least 3 characters',
-        variant: 'destructive',
+        title: "Error",
+        description: "Username must be at least 3 characters",
+        variant: "destructive",
       });
       return;
     }
@@ -112,18 +118,19 @@ export function EditProfileDialog({
     if (username !== profile.username) {
       if (!canChangeUsername) {
         toast({
-          title: 'Error',
-          description: `You can change your username again in ${daysUntilChange} days`,
-          variant: 'destructive',
+          title: "Error",
+          description:
+            `You can change your username again in ${daysUntilChange} days`,
+          variant: "destructive",
         });
         return;
       }
 
       if (!isAvailable) {
         toast({
-          title: 'Error',
-          description: usernameError || 'Username is not available',
-          variant: 'destructive',
+          title: "Error",
+          description: usernameError || "Username is not available",
+          variant: "destructive",
         });
         return;
       }
@@ -136,15 +143,17 @@ export function EditProfileDialog({
 
       // Update profile first for instant feedback
       const { error: updateError } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({
           display_name: displayName.trim(),
           username: username.trim().toLowerCase(),
           bio: bio.trim() || null,
           whatsapp_number: whatsappNumber.trim() || null,
-          username_updated_at: username !== profile.username ? new Date().toISOString() : undefined,
+          username_updated_at: username !== profile.username
+            ? new Date().toISOString()
+            : undefined,
         })
-        .eq('id', profile.id);
+        .eq("id", profile.id);
 
       if (updateError) throw updateError;
 
@@ -153,8 +162,8 @@ export function EditProfileDialog({
       onProfileUpdate();
 
       toast({
-        title: 'Success',
-        description: 'Profile updated successfully',
+        title: "Success",
+        description: "Profile updated successfully",
       });
 
       // Handle avatar upload in background
@@ -162,18 +171,18 @@ export function EditProfileDialog({
         // Resize image
         const resizedBlob = await resizeImage(avatarFile, 400, 400, 0.85);
         const timestamp = Date.now();
-        const fileExt = avatarFile.name.split('.').pop();
+        const fileExt = avatarFile.name.split(".").pop();
         const filePath = `${profile.id}/${timestamp}.${fileExt}`;
 
         // Delete old avatar if exists
         if (profile.avatar_url) {
-          const oldPath = profile.avatar_url.split('/').slice(-2).join('/');
-          await supabase.storage.from('avatars').remove([oldPath]);
+          const oldPath = profile.avatar_url.split("/").slice(-2).join("/");
+          await supabase.storage.from("avatars").remove([oldPath]);
         }
 
         // Upload new avatar
         const { error: uploadError } = await supabase.storage
-          .from('avatars')
+          .from("avatars")
           .upload(filePath, resizedBlob, {
             contentType: avatarFile.type,
             upsert: false,
@@ -183,44 +192,50 @@ export function EditProfileDialog({
 
         // Get public URL
         const { data: { publicUrl } } = supabase.storage
-          .from('avatars')
+          .from("avatars")
           .getPublicUrl(filePath);
 
         newAvatarUrl = publicUrl;
 
         // Update avatar URL
         await supabase
-          .from('profiles')
+          .from("profiles")
           .update({ avatar_url: newAvatarUrl })
-          .eq('id', profile.id);
+          .eq("id", profile.id);
 
         onProfileUpdate();
       } else if (removeAvatar && profile.avatar_url) {
         // Remove avatar in background
-        const oldPath = profile.avatar_url.split('/').slice(-2).join('/');
-        await supabase.storage.from('avatars').remove([oldPath]);
-        
+        const oldPath = profile.avatar_url.split("/").slice(-2).join("/");
+        await supabase.storage.from("avatars").remove([oldPath]);
+
         await supabase
-          .from('profiles')
+          .from("profiles")
           .update({ avatar_url: null })
-          .eq('id', profile.id);
+          .eq("id", profile.id);
 
         onProfileUpdate();
       }
-    } catch (error: any) {
-      console.error('Error updating profile:', error);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
+      console.error("Error updating profile:", error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to update profile',
-        variant: 'destructive',
+        title: "Error",
+        description: error instanceof Error
+          ? error.message
+          : "Failed to update profile",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const isFormValid =
-    displayName.trim().length > 0 &&
+  const isFormValid = displayName.trim().length > 0 &&
     username.trim().length >= 3 &&
     (username === profile.username || (isAvailable && canChangeUsername));
 
@@ -260,18 +275,21 @@ export function EditProfileDialog({
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  You can change your username again in {daysUntilChange} {daysUntilChange === 1 ? 'day' : 'days'}
+                  You can change your username again in {daysUntilChange}{" "}
+                  {daysUntilChange === 1 ? "day" : "days"}
                 </AlertDescription>
               </Alert>
             )}
-            {usernameChanged && canChangeUsername && daysSinceLastChange < 60 && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Last changed {daysSinceLastChange} {daysSinceLastChange === 1 ? 'day' : 'days'} ago
-                </AlertDescription>
-              </Alert>
-            )}
+            {usernameChanged && canChangeUsername && daysSinceLastChange < 60 &&
+              (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Last changed {daysSinceLastChange}{" "}
+                    {daysSinceLastChange === 1 ? "day" : "days"} ago
+                  </AlertDescription>
+                </Alert>
+              )}
             <div className="relative">
               <Input
                 id="username"
@@ -283,10 +301,14 @@ export function EditProfileDialog({
                 disabled={usernameChanged && !canChangeUsername}
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {isChecking && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                {!isChecking && username.length >= 3 && username !== profile.username && canChangeUsername && (
+                {isChecking && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+                {!isChecking && username.length >= 3 &&
+                  username !== profile.username && canChangeUsername && (
                   <>
-                    {isAvailable && <Check className="w-4 h-4 text-green-500" />}
+                    {isAvailable &&
+                      <Check className="w-4 h-4 text-green-500" />}
                     {!isAvailable && <X className="w-4 h-4 text-destructive" />}
                   </>
                 )}
@@ -295,7 +317,8 @@ export function EditProfileDialog({
             {usernameError && username.length >= 3 && canChangeUsername && (
               <p className="text-xs text-destructive">{usernameError}</p>
             )}
-            {username.length >= 3 && isAvailable && username !== profile.username && canChangeUsername && (
+            {username.length >= 3 && isAvailable &&
+              username !== profile.username && canChangeUsername && (
               <p className="text-xs text-green-600">Username is available</p>
             )}
           </div>
