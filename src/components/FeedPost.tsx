@@ -72,9 +72,19 @@ export const FeedPost = ({
   const wasPlayingRef = useRef(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const hasInitializedRef = useRef(false);
+  const preloadedRef = useRef(false);
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
+
+  // Preload video when post is nearby (not yet active but close)
+  useEffect(() => {
+    if (mediaType === 'video' && !preloadedRef.current && videoRef.current) {
+      // Preload by setting src (browser will start buffering)
+      videoRef.current.preload = 'auto';
+      preloadedRef.current = true;
+    }
+  }, [mediaType]);
 
   useEffect(() => {
     const getCurrentUser = async () => {

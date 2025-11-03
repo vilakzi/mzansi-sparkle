@@ -5,6 +5,7 @@ import { VerticalFeed } from "@/components/VerticalFeed";
 import { UploadButton } from "@/components/UploadButton";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { toast } from "sonner";
 
 type Profile = {
@@ -79,7 +80,9 @@ const Index = () => {
       
       <div className="flex justify-center">
         <div className="relative w-full max-w-md">
-          <VerticalFeed />
+          <ErrorBoundary>
+            <VerticalFeed />
+          </ErrorBoundary>
           
           {showUpload && (
             <UploadButton onClose={() => setShowUpload(false)} />

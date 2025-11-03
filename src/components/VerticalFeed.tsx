@@ -101,34 +101,7 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
-  const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
-    const [profileData, likeData, saveData] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url")
-        .eq("id", post.user_id)
-        .single(),
-      supabase
-        .from("post_likes")
-        .select("user_id")
-        .eq("post_id", post.id)
-        .eq("user_id", session.user.id)
-        .maybeSingle(),
-      supabase
-        .from("saved_posts")
-        .select("user_id")
-        .eq("post_id", post.id)
-        .eq("user_id", session.user.id)
-        .maybeSingle()
-    ]);
-
-    return {
-      ...post,
-      profile: profileData.data,
-      user_liked: !!likeData.data,
-      user_saved: !!saveData.data
-    };
-  }, []);
+  // Removed enrichPostWithDetails - now using optimized RPC function
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -151,58 +124,43 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Simple query: just fetch posts ordered by created_at
-      let query = supabase
-        .from("posts")
-        .select(`
-          *,
-          profiles:user_id (
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + BATCH_SIZE - 1);
-
-      // If "following" feed, filter by followed users
-      if (feedType === "following") {
-        const { data: followingData } = await supabase
-          .from("follows")
-          .select("following_id")
-          .eq("follower_id", session.user.id);
-        
-        const followingIds = followingData?.map(f => f.following_id) || [];
-        
-        if (followingIds.length > 0) {
-          query = query.in("user_id", followingIds);
-        } else {
-          // No following, return empty
-          setPosts([]);
-          setHasMore(false);
-          setLoading(false);
-          setLoadingMore(false);
-          setIsRefreshing(false);
-          return;
-        }
-      }
-
-      const { data: fetchedPosts, error } = await query;
+      // Use optimized RPC function - fetches all data in ONE query
+      const { data: fetchedPosts, error } = await supabase.rpc('get_feed_optimized', {
+        p_user_id: session.user.id,
+        p_feed_type: feedType,
+        p_limit: BATCH_SIZE,
+        p_offset: offset
+      });
 
       if (error) throw error;
 
-      // Enrich posts with user interaction data
-      const postsWithDetails = await Promise.all(
-        (fetchedPosts || []).map((post) => enrichPostWithDetails(post, session))
-      );
+      // Transform data to match Post interface
+      const transformedPosts = (fetchedPosts || []).map((post: any) => ({
+        id: post.id,
+        media_url: post.media_url,
+        media_type: post.media_type,
+        caption: post.caption,
+        likes_count: post.likes_count,
+        comments_count: post.comments_count,
+        shares_count: post.shares_count,
+        created_at: post.created_at,
+        user_id: post.user_id,
+        user_liked: post.user_liked,
+        user_saved: post.user_saved,
+        profile: {
+          display_name: post.display_name,
+          username: post.username,
+          avatar_url: post.avatar_url
+        }
+      }));
 
       if (isRefresh) {
-        setPosts(postsWithDetails);
+        setPosts(transformedPosts);
         setNewPostsCount(0);
       } else if (cursor) {
-        setPosts((current) => [...current, ...postsWithDetails]);
+        setPosts((current) => [...current, ...transformedPosts]);
       } else {
-        setPosts(postsWithDetails);
+        setPosts(transformedPosts);
       }
 
       setHasMore((fetchedPosts || []).length === BATCH_SIZE);
@@ -247,19 +205,9 @@ export const VerticalFeed = () => {
           schema: "public",
           table: "posts",
         },
-        async (payload) => {
-          // Notify about new posts instead of auto-adding
+        async () => {
+          // Just increment counter - don't fetch immediately to avoid N+1 queries
           setNewPostsCount((prev) => prev + 1);
-          
-          // Auto-add if user is at the top
-          if (containerRef.current && containerRef.current.scrollTop < 100) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-              const enrichedPost = await enrichPostWithDetails(payload.new, session);
-              setPosts((current) => [enrichedPost, ...current]);
-              setNewPostsCount(0);
-            }
-          }
         }
       )
       .subscribe();
