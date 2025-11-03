@@ -2,10 +2,11 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
 import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 import { RefreshCw, ArrowUp } from "lucide-react";
 import { Button } from "./ui/button";
-import fetchFeed from "@/services/feed";
+import { Badge } from "./ui/badge";
 
 interface Post {
   id: string;
@@ -17,26 +18,22 @@ interface Post {
   shares_count: number;
   created_at: string;
   user_id: string;
-  is_liked?: boolean;
-  is_saved?: boolean;
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  bio?: string;
-  followers_count?: number;
-  following_count?: number;
+  user_liked?: boolean;
+  user_saved?: boolean;
+  profile?: {
+    display_name: string;
+    username: string;
+    avatar_url: string | null;
+  };
 }
 
-type VerticalFeedProps = {
-  initialPosts?: Post[];
-};
-
-export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+export const VerticalFeed = () => {
+  const [posts, setPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(initialPosts.length === 0);
+  const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [feedType, setFeedType] = useState<"for-you" | "following">("for-you");
   const [userId, setUserId] = useState<string | null>(null);
   const [newPostsCount, setNewPostsCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -44,8 +41,6 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const profileCacheRef = useRef<Map<string, any>>(new Map());
-  const trackedPostsRef = useRef<Set<string>>(new Set()); // Dedupe tracking
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -57,16 +52,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     initializeUser();
   }, []);
 
-  // Initialize with provided posts
   useEffect(() => {
-    if (initialPosts.length > 0) {
-      setPosts(initialPosts);
-      setLoading(false);
-    }
-  }, [initialPosts]);
-
-  useEffect(() => {
-    if (userId && initialPosts.length === 0) {
+    if (userId) {
       fetchPosts();
       const cleanup = setupRealtimeSubscription();
       return cleanup;
@@ -74,6 +61,16 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   }, [userId]);
 
   useEffect(() => {
+    if (userId) {
+      setPosts([]);
+      setHasMore(true);
+      setLoading(true);
+      fetchPosts();
+    }
+  }, [feedType, userId]);
+
+  useEffect(() => {
+    // Setup intersection observer for infinite scroll - trigger earlier
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingMore && !loading) {
@@ -94,15 +91,44 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     };
   }, [loadingMore, loading, posts.length]);
 
+  // Ensure first post is active on mount
   useEffect(() => {
     if (posts.length > 0 && currentIndex === 0) {
+      // Force a tiny delay to ensure DOM is ready
       setTimeout(() => {
         setCurrentIndex(0);
       }, 100);
     }
   }, [posts.length]);
 
-  const VISIBLE_RANGE = 3; // Show current + 3 before + 3 after
+  const enrichPostWithDetails = useCallback(async (post: any, session: any) => {
+    const [profileData, likeData, saveData] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("username, display_name, avatar_url")
+        .eq("id", post.user_id)
+        .single(),
+      supabase
+        .from("post_likes")
+        .select("user_id")
+        .eq("post_id", post.id)
+        .eq("user_id", session.user.id)
+        .maybeSingle(),
+      supabase
+        .from("saved_posts")
+        .select("user_id")
+        .eq("post_id", post.id)
+        .eq("user_id", session.user.id)
+        .maybeSingle()
+    ]);
+
+    return {
+      ...post,
+      profile: profileData.data,
+      user_liked: !!likeData.data,
+      user_saved: !!saveData.data
+    };
+  }, []);
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -122,51 +148,103 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         return;
       }
 
-      const BATCH_SIZE = 10;
+      const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Use centralized feed service (simple or personalized depending on feature flag)
-      const { rows } = await fetchFeed({
-        userId: session.user.id,
-        feedType: "for-you",
-        limit: BATCH_SIZE,
-        offset,
-      });
+      let fetchedPosts: any[] = [];
+      let error: any = null;
 
-      const fetchedPosts = (rows || []).map((post: any) => ({
-        ...post,
-        media_type: post.media_type as "image" | "video",
-        user_liked: post.is_liked,
-        user_saved: post.is_saved,
-        profile: {
-          id: post.user_id,
-          username: post.username,
-          display_name: post.display_name,
-          avatar_url: post.avatar_url,
-          bio: post.bio,
-          followers_count: post.followers_count,
-          following_count: post.following_count,
+      if (feedType === "for-you") {
+        // Use smart shuffle feed for discovery
+        const { data, error: rpcError } = await supabase.rpc("get_shuffled_feed", {
+          p_user_id: session.user.id,
+          p_limit: BATCH_SIZE,
+          p_offset: offset,
+        });
+
+        if (rpcError) {
+          error = rpcError;
+        } else {
+          // Fetch profiles separately since RPC doesn't support joins
+          const userIds = [...new Set(data?.map((p: any) => p.user_id) || [])];
+          const { data: profilesData } = await supabase
+            .from("profiles")
+            .select("id, username, display_name, avatar_url")
+            .in("id", userIds);
+
+          // Merge profiles into posts
+          fetchedPosts = (data || []).map((post: any) => ({
+            ...post,
+            profile: profilesData?.find((p) => p.id === post.user_id),
+          }));
         }
-      }));
-
-      if (isRefresh) {
-        setPosts(fetchedPosts);
-        setNewPostsCount(0);
-      } else if (cursor) {
-        setPosts((current) => [...current, ...fetchedPosts]);
       } else {
-        setPosts(fetchedPosts);
+        // Following feed: chronological order
+        const { data: followingData } = await supabase
+          .from("follows")
+          .select("following_id")
+          .eq("follower_id", session.user.id);
+
+        const followingIds = followingData?.map((f) => f.following_id) || [];
+
+        if (followingIds.length === 0) {
+          setPosts([]);
+          setHasMore(false);
+          setLoading(false);
+          setLoadingMore(false);
+          setIsRefreshing(false);
+          return;
+        }
+
+        const { data, error: queryError } = await supabase
+          .from("posts")
+          .select(
+            `
+            *,
+            profile:profiles!posts_user_id_fkey(
+              id,
+              username,
+              display_name,
+              avatar_url
+            )
+          `
+          )
+          .in("user_id", followingIds)
+          .order("created_at", { ascending: false })
+          .range(offset, offset + BATCH_SIZE - 1);
+
+        if (queryError) {
+          error = queryError;
+        } else {
+          fetchedPosts = data || [];
+        }
       }
 
-      setHasMore(fetchedPosts.length === BATCH_SIZE);
+      if (error) throw error;
 
+      // Enrich posts with user interaction data
+      const postsWithDetails = await Promise.all(
+        (fetchedPosts || []).map((post) => enrichPostWithDetails(post, session))
+      );
+
+      if (isRefresh) {
+        setPosts(postsWithDetails);
+        setNewPostsCount(0);
+      } else if (cursor) {
+        setPosts((current) => [...current, ...postsWithDetails]);
+      } else {
+        setPosts(postsWithDetails);
+      }
+
+      setHasMore((fetchedPosts || []).length === BATCH_SIZE);
+      
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
     } catch (error: any) {
-      console.error('Feed fetch error:', error);
+      console.error(`Feed fetch error (${feedType}):`, error);
       toast.error("Failed to load posts");
-
+      
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
@@ -201,7 +279,18 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
           table: "posts",
         },
         async (payload) => {
+          // Notify about new posts instead of auto-adding
           setNewPostsCount((prev) => prev + 1);
+          
+          // Auto-add if user is at the top
+          if (containerRef.current && containerRef.current.scrollTop < 100) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              const enrichedPost = await enrichPostWithDetails(payload.new, session);
+              setPosts((current) => [enrichedPost, ...current]);
+              setNewPostsCount(0);
+            }
+          }
         }
       )
       .subscribe();
@@ -213,35 +302,45 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
+    
+    // Debounce scroll handling for better performance
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
+    
     scrollTimeoutRef.current = setTimeout(() => {
       if (!containerRef.current) return;
+      
       const scrollTop = containerRef.current.scrollTop;
       const containerHeight = containerRef.current.clientHeight;
+      
+      // Calculate which post is most visible (center of viewport)
       const centerPoint = scrollTop + (containerHeight / 2);
       const index = Math.floor(centerPoint / window.innerHeight);
+      
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
+        
+        // Track view when user scrolls to a new post
         if (posts[index]) {
           trackView(posts[index].id);
         }
       }
-    }, 200);
+    }, 100);
   }, [currentIndex, posts]);
 
-  const trackView = (postId: string) => {
-    if (trackedPostsRef.current.has(postId)) return;
-    trackedPostsRef.current.add(postId);
-    setTimeout(() => {
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        void supabase.from("post_views").insert({
-          post_id: postId,
-          user_id: user?.id || null,
-        });
+  const trackView = async (postId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      await supabase.from("post_views").insert({
+        post_id: postId,
+        user_id: user?.id || null,
+        watch_duration: 0,
       });
-    }, 0);
+    } catch (error) {
+      // Silently fail - view tracking is not critical
+    }
   };
 
   const handleLike = async (postId: string) => {
@@ -262,10 +361,11 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       }
     } else if (data && data.length > 0) {
       const { liked, new_count } = data[0];
+      
       setPosts((current) =>
         current.map((post) =>
           post.id === postId
-            ? { ...post, likes_count: new_count, is_liked: liked }
+            ? { ...post, likes_count: new_count, user_liked: liked }
             : post
         )
       );
@@ -283,7 +383,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     if (!post) return;
 
     try {
-      if (post.is_saved) {
+      if (post.user_saved) {
+        // Unsave
         const { error } = await supabase
           .from("saved_posts")
           .delete()
@@ -293,6 +394,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
         if (error) throw error;
         toast.success("Post removed from saved");
       } else {
+        // Save
         const { error } = await supabase
           .from("saved_posts")
           .insert({ post_id: postId, user_id: user.id });
@@ -303,7 +405,7 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
       setPosts((current) =>
         current.map((p) =>
-          p.id === postId ? { ...p, is_saved: !p.is_saved } : p
+          p.id === postId ? { ...p, user_saved: !p.user_saved } : p
         )
       );
     } catch (error: any) {
@@ -317,11 +419,16 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
   const handleDeletePost = async (postId: string) => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
+
+    // Optimistically remove from UI
     setPosts((current) => current.filter(p => p.id !== postId));
+
+    // Show undo toast with action
     const undoToastId = toast.success("Post deleted", {
       action: {
         label: "Undo",
         onClick: () => {
+          // Restore post to UI
           setPosts((current) => {
             const newPosts = [...current];
             const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
@@ -337,17 +444,23 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       },
       duration: 5000,
     });
+
+    // Set timeout for actual deletion
     const deleteTimeoutId = setTimeout(async () => {
       try {
+        // Delete from database
         const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
           p_post_id: postId
         });
 
         if (deleteError) throw deleteError;
+
+        // Delete from storage
         const storagePath = post.media_url.split('/').slice(-2).join('/');
         await supabase.storage.from('posts-media').remove([storagePath]);
       } catch (error: any) {
         console.error('Error deleting post:', error);
+        // Restore post on error
         setPosts((current) => {
           const newPosts = [...current];
           const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
@@ -369,19 +482,37 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
-        <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="text-xl font-bold">Feed</h1>
+      {/* Feed Type Tabs */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
+        <div className="relative">
+          <Tabs value={feedType} onValueChange={(value) => setFeedType(value as "for-you" | "following")} className="w-full">
+            <TabsList className="w-full grid grid-cols-2 h-12 rounded-none">
+              <TabsTrigger value="for-you" className="text-sm font-medium relative">
+                For You
+                {newPostsCount > 0 && feedType === "for-you" && (
+                  <Badge variant="destructive" className="ml-2 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
+                    {newPostsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="following" className="text-sm font-medium">
+                Following
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          {/* Refresh Button */}
           <Button
             variant="ghost"
             size="icon"
+            className="absolute right-2 top-1/2 -translate-y-1/2"
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
-            <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
+        
         {/* New Posts Banner */}
         {newPostsCount > 0 && currentIndex > 0 && (
           <div className="absolute top-full left-1/2 -translate-x-1/2 z-20 mt-2">
@@ -399,7 +530,8 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             </Button>
           </div>
         )}
-      </header>
+      </div>
+
       {/* Feed Content */}
       <div className="flex flex-1 justify-center relative">
         <div
@@ -412,10 +544,10 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             <div className="flex h-full items-center justify-center p-8">
               <div className="text-center space-y-4">
                 <p className="text-muted-foreground mb-4">
-                  No posts yet
+                  {feedType === "following" ? "No posts from people you follow" : "No posts yet"}
                 </p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Discover amazing content
+                  {feedType === "following" ? "Follow some users to see their posts here" : "Discover amazing content"}
                 </p>
                 <Button onClick={handleRefresh} variant="outline">
                   <RefreshCw className="h-4 w-4 mr-2" />
@@ -425,51 +557,31 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
             </div>
           ) : (
             <>
-              {posts.map((post, index) => {
-                const distanceFromCurrent = Math.abs(index - currentIndex);
-                const isInVisibleRange = distanceFromCurrent <= VISIBLE_RANGE;
-                return (
-                  <div
-                    key={`${post.id}-${index}`}
-                    ref={index === posts.length - 5 ? lastPostRef : null}
-                    className="snap-start snap-always"
-                    style={{
-                      display: isInVisibleRange ? 'block' : 'none',
-                      opacity: isInVisibleRange ? 1 : 0,
-                      pointerEvents: isInVisibleRange ? 'auto' : 'none',
-                    }}
-                  >
-                    <FeedPost
-                      id={post.id}
-                      mediaUrl={post.media_url}
-                      mediaType={post.media_type}
-                      caption={post.caption}
-                      likesCount={post.likes_count}
-                      commentsCount={post.comments_count}
-                      sharesCount={post.shares_count}
-                      isSaved={post.is_saved || false}
-                      isLiked={post.is_liked || false}
-                      isActive={index === currentIndex}
-                      isPrevious={index === currentIndex - 1}
-                      isNext={index === currentIndex + 1}
-                      nextVideoUrl={
-                        index === currentIndex && posts[index + 1]?.media_type === 'video'
-                          ? posts[index + 1]?.media_url
-                          : undefined
-                      }
-                      onLike={() => handleLike(post.id)}
-                      onSaveToggle={() => handleSaveToggle(post.id)}
-                      onDelete={() => handleDeletePost(post.id)}
-                      profile={{ 
-                        display_name: post.display_name, 
-                        username: post.username, 
-                        avatar_url: post.avatar_url 
-                      }}
-                      userId={post.user_id}
-                    />
-                  </div>
-                );
-              })}
+              {posts.map((post, index) => (
+                <div
+                  key={`${post.id}-${index}`}
+                  ref={index === posts.length - 5 ? lastPostRef : null}
+                  className="snap-start snap-always"
+                >
+                  <FeedPost
+                    id={post.id}
+                    mediaUrl={post.media_url}
+                    mediaType={post.media_type}
+                    caption={post.caption}
+                    likesCount={post.likes_count}
+                    commentsCount={post.comments_count}
+                    sharesCount={post.shares_count}
+                    isSaved={post.user_saved || false}
+                    isLiked={post.user_liked || false}
+                    isActive={index === currentIndex}
+                    onLike={() => handleLike(post.id)}
+                    onSaveToggle={() => handleSaveToggle(post.id)}
+                    onDelete={() => handleDeletePost(post.id)}
+                    userId={post.user_id}
+                    profile={post.profile}
+                  />
+                </div>
+              ))}
               {loadingMore && (
                 <div className="flex h-screen items-center justify-center snap-start">
                   <div className="text-center space-y-4">
@@ -485,5 +597,3 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
     </div>
   );
 };
-
-export default VerticalFeed;

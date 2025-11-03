@@ -104,7 +104,7 @@ export default function Messages() {
     enabled: !!currentUserId,
   });
 
-  // Realtime subscription for new messages (triggers conversation updates)
+  // Realtime subscription for conversation updates
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -113,7 +113,18 @@ export default function Messages() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
+          schema: 'public',
+          table: 'conversations'
+        },
+        () => {
+          refetch();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
           schema: 'public',
           table: 'messages'
         },

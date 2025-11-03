@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VerticalFeed } from "@/components/VerticalFeed";
-import { ChunkedUpload } from "@/components/ChunkedUpload";
+import { UploadButton } from "@/components/UploadButton";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { LoadingScreen } from "@/components/LoadingScreen";
+import { toast } from "sonner";
 
 type Profile = {
   username: string;
@@ -17,12 +17,17 @@ const Index = () => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [showUpload, setShowUpload] = useState(false);
-  const [initialPosts, setInitialPosts] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadInitialData();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate("/auth");
+      } else {
+        setUser(session.user);
+        fetchProfile(session.user.id);
+      }
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -30,7 +35,9 @@ const Index = () => {
           navigate("/auth");
         } else {
           setUser(session.user);
-          loadInitialData();
+          setTimeout(() => {
+            fetchProfile(session.user.id);
+          }, 0);
         }
       }
     );
@@ -38,68 +45,29 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const loadInitialData = async () => {
+  const fetchProfile = async (userId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        navigate("/auth");
-        return;
-      }
-
-      setUser(session.user);
-
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("username, display_name, avatar_url")
+        .eq("id", userId)
         .single();
 
-      if (profileData) {
-        setProfile(profileData);
-      }
-
-      // Use simple feed function
-      const { data: feedData, error } = await supabase.rpc('get_simple_feed', {
-        p_user_id: session.user.id,
-        p_limit: 10,
-        p_offset: 0
-      });
-
       if (error) throw error;
-
-      // Map data to expected format with profile embedded
-      const posts = (feedData || []).map((post: any) => ({
-        ...post,
-        user_liked: post.is_liked,
-        user_saved: post.is_saved,
-        profile: {
-          id: post.user_id,
-          username: post.username,
-          display_name: post.display_name,
-          avatar_url: post.avatar_url,
-          bio: post.bio,
-          followers_count: post.followers_count,
-          following_count: post.following_count,
-        }
-      }));
-
-      setInitialPosts(posts);
+      setProfile(data);
     } catch (error) {
-      console.error("Error loading initial data:", error);
-    } finally {
-      setIsLoading(false);
+      console.error("Error fetching profile:", error);
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Logged out successfully");
   };
 
   const handleUploadClick = () => {
     setShowUpload(true);
   };
-
-  if (isLoading) {
-    return <LoadingScreen />;
-  }
 
   if (!user) {
     return null;
@@ -111,10 +79,10 @@ const Index = () => {
       
       <div className="flex justify-center">
         <div className="relative w-full max-w-md">
-          <VerticalFeed initialPosts={initialPosts} />
+          <VerticalFeed />
           
           {showUpload && (
-            <ChunkedUpload onClose={() => setShowUpload(false)} />
+            <UploadButton onClose={() => setShowUpload(false)} />
           )}
           
           <BottomNav onUploadClick={handleUploadClick} userProfile={profile} />

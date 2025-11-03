@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -28,9 +28,6 @@ interface FeedPostProps {
   isSaved: boolean;
   isLiked: boolean;
   isActive: boolean;
-  isPrevious?: boolean;
-  isNext?: boolean;
-  nextVideoUrl?: string;
   onLike: () => void;
   onSaveToggle: () => void;
   onDelete?: () => void;
@@ -42,7 +39,7 @@ interface FeedPostProps {
   };
 }
 
-const FeedPostComponent = ({
+export const FeedPost = ({
   id,
   mediaUrl,
   mediaType,
@@ -53,9 +50,6 @@ const FeedPostComponent = ({
   isSaved,
   isLiked,
   isActive,
-  isPrevious = false,
-  isNext = false,
-  nextVideoUrl,
   onLike,
   onSaveToggle,
   onDelete,
@@ -88,26 +82,6 @@ const FeedPostComponent = ({
     };
     getCurrentUser();
   }, []);
-
-  // Prefetch next video when current video is 50% watched
-  useEffect(() => {
-    if (mediaType === "video" && isPlaying && progress > 50 && nextVideoUrl && isActive) {
-      const link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.as = 'video';
-      link.href = nextVideoUrl;
-      link.type = 'video/mp4';
-      document.head.appendChild(link);
-      
-      return () => {
-        try {
-          document.head.removeChild(link);
-        } catch (e) {
-          // Link may have already been removed
-        }
-      };
-    }
-  }, [isPlaying, progress, nextVideoUrl, isActive, mediaType]);
 
   // Handle video play/pause based on isActive state
   useEffect(() => {
@@ -344,7 +318,6 @@ const FeedPostComponent = ({
             loop
             playsInline
             muted={isMuted}
-            preload={isActive || isPrevious || isNext ? "auto" : "metadata"}
           />
 
           {/* Play/Pause indicator */}
@@ -407,7 +380,6 @@ const FeedPostComponent = ({
           src={mediaUrl}
           alt="Post"
           className="h-full w-full object-cover"
-          loading="lazy"
         />
       )}
       
@@ -522,15 +494,3 @@ const FeedPostComponent = ({
     </div>
   );
 };
-
-// Memoized export with custom comparison
-export const FeedPost = memo(FeedPostComponent, (prevProps, nextProps) => {
-  return (
-    prevProps.id === nextProps.id &&
-    prevProps.isLiked === nextProps.isLiked &&
-    prevProps.isSaved === nextProps.isSaved &&
-    prevProps.isActive === nextProps.isActive &&
-    prevProps.likesCount === nextProps.likesCount &&
-    prevProps.commentsCount === nextProps.commentsCount
-  );
-});

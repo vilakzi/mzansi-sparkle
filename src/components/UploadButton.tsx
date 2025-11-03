@@ -17,7 +17,6 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -64,16 +63,11 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
 
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-      // Show progress indication
-      setUploadProgress(10);
-      
       const { error: uploadError } = await supabase.storage
         .from("posts-media")
         .upload(fileName, uploadFile);
 
       if (uploadError) throw uploadError;
-
-      setUploadProgress(70);
 
       const { data: { publicUrl } } = supabase.storage
         .from("posts-media")
@@ -90,8 +84,6 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
 
       if (insertError) throw insertError;
 
-      setUploadProgress(100);
-
       toast.success("Posted successfully!");
       setFile(null);
       setCaption("");
@@ -104,7 +96,6 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
       toast.error("Failed to upload post. Please try again.");
     } finally {
       setUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -161,7 +152,7 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
             disabled={!file || uploading}
             className="w-full"
           >
-            {uploading ? `Uploading... ${uploadProgress}%` : "Post"}
+            {uploading ? "Uploading..." : "Post"}
           </Button>
         </div>
       </DialogContent>

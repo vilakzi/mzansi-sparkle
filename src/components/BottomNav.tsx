@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Search, PlusCircle, TrendingUp, User } from "lucide-react";
+import { Home, Search, PlusCircle, Grid3x3, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,10 +40,10 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
       isSpecial: true,
     },
     {
-      path: "/trending",
-      icon: TrendingUp,
-      label: "Trending",
-      onClick: () => navigate("/trending"),
+      path: "/categories",
+      icon: Grid3x3,
+      label: "Categories",
+      onClick: () => navigate("/categories"),
     },
     {
       path: userProfile ? `/profile/${userProfile.username}` : "/profile",

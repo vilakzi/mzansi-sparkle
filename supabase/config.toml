@@ -1,7 +1,1 @@
 project_id = "ygifoyddcsbczjxnanmi"
-
-[functions.merge-upload-chunks]
-verify_jwt = true
-
-[functions.generate-upload-url]
-verify_jwt = true
