@@ -92,11 +92,10 @@ const Notifications = () => {
         .eq("read", false);
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(error.message);
+        console.error("Error fetching notifications:", error.message);
       } else {
-        console.error(String(error));
+        console.error("Error fetching notifications:", String(error));
       }
-      console.error("Error fetching notifications:", error);
       toast.error("Failed to load notifications");
     } finally {
       setLoading(false);

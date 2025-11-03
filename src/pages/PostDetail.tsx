@@ -101,11 +101,10 @@ const PostDetail = () => {
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(error.message);
+        console.error("Error fetching post:", error.message);
       } else {
-        console.error(String(error));
+        console.error("Error fetching post:", String(error));
       }
-      console.error("Error fetching post:", error);
       toast.error("Failed to load post");
     } finally {
       setLoading(false);
@@ -164,9 +163,9 @@ const PostDetail = () => {
       setPost({ ...post, user_saved: !post.user_saved });
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(error.message);
+        console.error("Failed to save post:", error.message);
       } else {
-        console.error(String(error));
+        console.error("Failed to save post:", String(error));
       }
       toast.error("Failed to save post");
     }

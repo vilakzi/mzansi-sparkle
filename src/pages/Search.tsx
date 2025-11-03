@@ -111,11 +111,10 @@ const Search = () => {
       setPosts(postsData || []);
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(error.message);
+        console.error("Search error:", error.message);
       } else {
-        console.error(String(error));
+        console.error("Search error:", String(error));
       }
-      console.error("Search error:", error);
       toast.error("Search failed");
     } finally {
       setLoading(false);

@@ -209,16 +209,20 @@ export function EditProfileDialog({
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(error.message);
+        console.error('Error updating profile:', error.message);
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to update profile',
+          variant: 'destructive',
+        });
       } else {
-        console.error(String(error));
+        console.error('Error updating profile:', String(error));
+        toast({
+          title: 'Error',
+          description: 'Failed to update profile',
+          variant: 'destructive',
+        });
       }
-      console.error('Error updating profile:', error);
-      toast({
-        title: 'Error',
-        description: (error as Error).message || 'Failed to update profile',
-        variant: 'destructive',
-      });
     } finally {
       setLoading(false);
     }

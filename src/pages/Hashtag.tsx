@@ -67,11 +67,10 @@ const Hashtag = () => {
       setPosts(postsData || []);
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(error.message);
+        console.error("Error fetching hashtag posts:", error.message);
       } else {
-        console.error(String(error));
+        console.error("Error fetching hashtag posts:", String(error));
       }
-      console.error("Error fetching hashtag posts:", error);
       toast.error("Failed to load hashtag posts");
     } finally {
       setLoading(false);

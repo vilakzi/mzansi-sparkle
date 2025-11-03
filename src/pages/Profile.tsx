@@ -120,12 +120,11 @@ const Profile = () => {
         setPosts(postsWithLikes);
       } catch (error: unknown) {
         if (error instanceof Error) {
-          console.error(error.message);
+          console.error("Failed to load profile:", error.message);
         } else {
-          console.error(String(error));
+          console.error("Failed to load profile:", String(error));
         }
         toast.error("Failed to load profile");
-        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -155,10 +154,11 @@ const Profile = () => {
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error(error.message);
+        toast.error(error.message || "Failed to update follow status");
       } else {
         console.error(String(error));
+        toast.error("Failed to update follow status");
       }
-      toast.error((error as Error).message || "Failed to update follow status");
     }
   };
 
@@ -204,11 +204,10 @@ const Profile = () => {
         await supabase.storage.from('posts-media').remove([storagePath]);
       } catch (error: unknown) {
         if (error instanceof Error) {
-          console.error(error.message);
+          console.error('Error deleting post:', error.message);
         } else {
-          console.error(String(error));
+          console.error('Error deleting post:', String(error));
         }
-        console.error('Error deleting post:', error);
         // Restore post on error
         setPosts((current) => [...current, post].sort((a, b) => 
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()

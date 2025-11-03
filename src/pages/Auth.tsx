@@ -85,10 +85,11 @@ const Auth = () => {
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error(error.message);
+        toast.error(error.message || "Authentication failed");
       } else {
         console.error(String(error));
+        toast.error("Authentication failed");
       }
-      toast.error((error as Error).message || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -106,10 +107,11 @@ const Auth = () => {
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error(error.message);
+        toast.error(error.message || "Google sign in failed");
       } else {
         console.error(String(error));
+        toast.error("Google sign in failed");
       }
-      toast.error((error as Error).message || "Google sign in failed");
     }
   };
 
