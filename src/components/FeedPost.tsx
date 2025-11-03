@@ -77,11 +77,11 @@ export const FeedPost = ({
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Preload video when post is nearby (not yet active but close)
+  // Aggressive preload for smooth scrolling
   useEffect(() => {
     if (mediaType === 'video' && !preloadedRef.current && videoRef.current) {
-      // Preload by setting src (browser will start buffering)
       videoRef.current.preload = 'auto';
+      videoRef.current.load(); // Force load immediately
       preloadedRef.current = true;
     }
   }, [mediaType]);
@@ -327,7 +327,7 @@ export const FeedPost = ({
   };
 
   return (
-    <div className="relative h-screen w-full snap-start snap-always">
+    <div className="relative h-screen w-full snap-start snap-always will-change-transform">
       {mediaType === "video" ? (
         <div className="relative h-full w-full">
           <div className="absolute inset-0 pointer-events-none" onClick={handleVideoClick}>
@@ -336,10 +336,11 @@ export const FeedPost = ({
           <video
             ref={videoRef}
             src={mediaUrl}
-            className="h-full w-full object-cover pointer-events-none"
+            className="h-full w-full object-cover pointer-events-none will-change-transform"
             loop
             playsInline
             muted={isMuted}
+            preload="auto"
           />
 
           {/* Play/Pause indicator */}

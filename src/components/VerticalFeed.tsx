@@ -507,12 +507,12 @@ export const VerticalFeed = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Feed Type Tabs */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
+      {/* Feed Type Tabs - Optimized for mobile */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b pt-safe">
         <div className="relative">
           <Tabs value={feedType} onValueChange={(value) => setFeedType(value as "for-you" | "following")} className="w-full">
             <TabsList className="w-full grid grid-cols-2 h-12 rounded-none">
-              <TabsTrigger value="for-you" className="text-sm font-medium relative">
+              <TabsTrigger value="for-you" className="text-sm font-medium relative touch-manipulation">
                 For You
                 {newPostsCount > 0 && feedType === "for-you" && (
                   <Badge variant="destructive" className="ml-2 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
@@ -520,7 +520,7 @@ export const VerticalFeed = () => {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="following" className="text-sm font-medium">
+              <TabsTrigger value="following" className="text-sm font-medium touch-manipulation">
                 Following
               </TabsTrigger>
             </TabsList>
@@ -530,7 +530,7 @@ export const VerticalFeed = () => {
           <Button
             variant="ghost"
             size="icon"
-            className="absolute right-2 top-1/2 -translate-y-1/2"
+            className="absolute right-2 top-1/2 -translate-y-1/2 touch-manipulation active:scale-90 transition-transform"
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
@@ -557,17 +557,21 @@ export const VerticalFeed = () => {
         )}
       </div>
 
-      {/* Feed Container */}
+      {/* Feed Container - Optimized for mobile */}
       <div className="flex-1 relative overflow-hidden">
         <div
           ref={containerRef}
           onScroll={handleScroll}
-          className="h-full overflow-y-scroll snap-y snap-mandatory"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain"
+          style={{ 
+            scrollbarWidth: 'none', 
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch'
+          }}
         >
           {posts.length === 0 && !loading ? (
             <div className="flex h-screen items-center justify-center snap-start">
-              <div className="text-center space-y-4 px-6">
+              <div className="text-center space-y-4 px-6 animate-fade-in">
                 <p className="text-muted-foreground text-lg">
                   {feedType === "following" 
                     ? "Follow some users to see their posts here"
@@ -581,7 +585,7 @@ export const VerticalFeed = () => {
                 <div
                   key={`${post.id}-${index}`}
                   ref={index === posts.length - 8 ? lastPostRef : null}
-                  className="snap-start snap-always"
+                  className="snap-start snap-always will-change-transform"
                 >
                   <FeedPost
                     id={post.id}
@@ -604,13 +608,27 @@ export const VerticalFeed = () => {
               ))}
               {loadingMore && (
                 <div className="flex h-screen items-center justify-center snap-start">
-                  <div className="text-center space-y-4">
+                  <div className="text-center space-y-4 animate-fade-in">
                     <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
                     <p className="text-muted-foreground">
                       {posts.length > 50 
-                        ? "Finding more great content..." 
-                        : "Loading more amazing content..."}
+                        ? "Discovering more content..." 
+                        : "Loading more posts..."}
                     </p>
+                  </div>
+                </div>
+              )}
+              {!loadingMore && posts.length > 0 && (
+                <div className="flex h-screen items-center justify-center snap-start">
+                  <div className="text-center space-y-4 px-6 animate-fade-in">
+                    <p className="text-muted-foreground">Keep scrolling - there's always more!</p>
+                    <Button 
+                      onClick={scrollToTop}
+                      variant="default"
+                      className="touch-manipulation active:scale-95"
+                    >
+                      Back to top
+                    </Button>
                   </div>
                 </div>
               )}
