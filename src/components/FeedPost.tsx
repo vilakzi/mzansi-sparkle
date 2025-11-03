@@ -71,6 +71,7 @@ export const FeedPost = ({
   const [currentTime, setCurrentTime] = useState(0);
   const wasPlayingRef = useRef(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const hasInitializedRef = useRef(false);
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
@@ -83,13 +84,24 @@ export const FeedPost = ({
     getCurrentUser();
   }, []);
 
-  // Handle video play/pause based on isActive state
+  // Handle initial video play on mount
+  useEffect(() => {
+    if (videoRef.current && mediaType === "video" && isActive && !hasInitializedRef.current) {
+      videoRef.current.play().catch(() => {
+        // Ignore autoplay errors
+      });
+      setIsPlaying(true);
+      hasInitializedRef.current = true;
+    }
+  }, [mediaType, isActive]);
+
+  // Handle video play/pause when isActive changes
   useEffect(() => {
     if (!videoRef.current || mediaType !== "video") return;
     
     if (isActive) {
       videoRef.current.play().catch(() => {
-        // Ignore autoplay errors
+        // Ignore autoplay errors  
       });
       setIsPlaying(true);
     } else {

@@ -151,43 +151,33 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      let fetchedPosts: any[] = [];
-      let error: any = null;
+      // Simple query: just fetch posts ordered by created_at
+      let query = supabase
+        .from("posts")
+        .select(`
+          *,
+          profiles:user_id (
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + BATCH_SIZE - 1);
 
-      if (feedType === "for-you") {
-        // Use smart shuffle feed for discovery
-        const { data, error: rpcError } = await supabase.rpc("get_shuffled_feed", {
-          p_user_id: session.user.id,
-          p_limit: BATCH_SIZE,
-          p_offset: offset,
-        });
-
-        if (rpcError) {
-          error = rpcError;
-        } else {
-          // Fetch profiles separately since RPC doesn't support joins
-          const userIds = [...new Set(data?.map((p: any) => p.user_id) || [])];
-          const { data: profilesData } = await supabase
-            .from("profiles")
-            .select("id, username, display_name, avatar_url")
-            .in("id", userIds);
-
-          // Merge profiles into posts
-          fetchedPosts = (data || []).map((post: any) => ({
-            ...post,
-            profile: profilesData?.find((p) => p.id === post.user_id),
-          }));
-        }
-      } else {
-        // Following feed: chronological order
+      // If "following" feed, filter by followed users
+      if (feedType === "following") {
         const { data: followingData } = await supabase
           .from("follows")
           .select("following_id")
           .eq("follower_id", session.user.id);
-
-        const followingIds = followingData?.map((f) => f.following_id) || [];
-
-        if (followingIds.length === 0) {
+        
+        const followingIds = followingData?.map(f => f.following_id) || [];
+        
+        if (followingIds.length > 0) {
+          query = query.in("user_id", followingIds);
+        } else {
+          // No following, return empty
           setPosts([]);
           setHasMore(false);
           setLoading(false);
@@ -195,30 +185,9 @@ export const VerticalFeed = () => {
           setIsRefreshing(false);
           return;
         }
-
-        const { data, error: queryError } = await supabase
-          .from("posts")
-          .select(
-            `
-            *,
-            profile:profiles!posts_user_id_fkey(
-              id,
-              username,
-              display_name,
-              avatar_url
-            )
-          `
-          )
-          .in("user_id", followingIds)
-          .order("created_at", { ascending: false })
-          .range(offset, offset + BATCH_SIZE - 1);
-
-        if (queryError) {
-          error = queryError;
-        } else {
-          fetchedPosts = data || [];
-        }
       }
+
+      const { data: fetchedPosts, error } = await query;
 
       if (error) throw error;
 
