@@ -24,8 +24,8 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
         share_type: shareType,
         platform: platform,
       });
-    } catch (error) {
-      console.error("Error tracking share:", error);
+    } catch (_error) {
+      console.error("Error tracking share:", _error);
     }
   };
 

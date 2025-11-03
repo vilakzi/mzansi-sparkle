@@ -99,7 +99,12 @@ const PostDetail = () => {
           profile: postData.profiles,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching post:", error);
       toast.error("Failed to load post");
     } finally {
@@ -157,7 +162,12 @@ const PostDetail = () => {
       }
 
       setPost({ ...post, user_saved: !post.user_saved });
-    } catch (error: any) {
+    } catch (_error: unknown) {
+      if (_error instanceof Error) {
+        console.error(_error.message);
+      } else {
+        console.error(String(_error));
+      }
       toast.error("Failed to save post");
     }
   };

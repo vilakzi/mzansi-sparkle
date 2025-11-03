@@ -109,7 +109,12 @@ const Search = () => {
 
       if (postsError) throw postsError;
       setPosts(postsData || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Search error:", error);
       toast.error("Search failed");
     } finally {

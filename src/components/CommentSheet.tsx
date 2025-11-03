@@ -90,7 +90,12 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       });
 
       setComments(rootComments);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching comments:", error);
       toast.error("Failed to load comments");
     }
@@ -120,7 +125,12 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
       setReplyingTo(null);
       toast.success("Comment posted");
       fetchComments();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error posting comment:", error);
       toast.error("Failed to post comment");
     } finally {
