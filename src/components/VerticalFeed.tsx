@@ -100,7 +100,7 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
-  // Preload next 3 videos when current video changes
+  // Preload next 3 videos for instant playback
   useEffect(() => {
     if (currentIndex >= 0 && posts.length > 0) {
       const nextVideos = posts
@@ -108,15 +108,15 @@ export const VerticalFeed = () => {
         .filter(p => p.media_type === 'video');
       
       // Remove old prefetch links
-      document.querySelectorAll('link[data-video-prefetch]').forEach(link => link.remove());
+      document.querySelectorAll('link[data-prefetch-video]').forEach(link => link.remove());
       
-      // Add new prefetch links for upcoming videos
+      // Add new prefetch links
       nextVideos.forEach(post => {
         const link = document.createElement('link');
         link.rel = 'prefetch';
         link.as = 'video';
         link.href = post.media_url;
-        link.setAttribute('data-video-prefetch', 'true');
+        link.setAttribute('data-prefetch-video', 'true');
         document.head.appendChild(link);
       });
     }
