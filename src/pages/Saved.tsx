@@ -77,7 +77,12 @@ const Saved = () => {
 
       if (error) throw error;
       setSavedPosts(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching saved posts:", error);
       toast.error("Failed to load saved posts");
     } finally {

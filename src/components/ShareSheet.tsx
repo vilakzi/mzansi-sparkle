@@ -37,7 +37,7 @@ export const ShareSheet = ({ postId, isOpen, onClose }: ShareSheetProps) => {
       toast.success("Link copied to clipboard");
       trackShare("copy_link");
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to copy link");
     }
   };

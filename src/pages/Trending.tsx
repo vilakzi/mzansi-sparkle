@@ -88,7 +88,12 @@ const Trending = () => {
 
       if (hashtagsError) throw hashtagsError;
       setTrendingHashtags(hashtagsData || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error(String(error));
+      }
       console.error("Error fetching trending:", error);
       toast.error("Failed to load trending content");
     } finally {
