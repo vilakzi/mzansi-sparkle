@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 import { RefreshCw, ArrowUp } from "lucide-react";
 import { Button } from "./ui/button";
+import { isPersonalizedFeedEnabled, getFeedMode } from "@/lib/featureFlags";
 
 interface Post {
   id: string;
@@ -129,7 +130,17 @@ export const VerticalFeed = ({ initialPosts = [] }: VerticalFeedProps) => {
       const BATCH_SIZE = 10;
       const offset = cursor ? posts.length : 0;
 
-      // Use simple feed function
+      // Log feed mode on first load
+      if (!cursor && !isRefresh) {
+        const feedMode = getFeedMode();
+        if (isPersonalizedFeedEnabled()) {
+          console.warn('⚠️ Personalized feed is ENABLED - may experience slow load times (>30s)');
+        } else {
+          console.info('ℹ️ Running in simple feed mode (fast & optimized)');
+        }
+      }
+
+      // Use simple feed function (personalized feed can be enabled via feature flag)
       const { data: feedData, error } = await supabase.rpc("get_simple_feed", {
         p_user_id: session.user.id,
         p_limit: BATCH_SIZE,

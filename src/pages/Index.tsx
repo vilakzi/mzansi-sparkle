@@ -6,6 +6,7 @@ import { ChunkedUpload } from "@/components/ChunkedUpload";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { isPersonalizedFeedEnabled, getFeedMode } from "@/lib/featureFlags";
 
 type Profile = {
   username: string;
@@ -60,7 +61,15 @@ const Index = () => {
         setProfile(profileData);
       }
 
-      // Use simple feed function
+      // Log feed mode for debugging
+      const feedMode = getFeedMode();
+      if (isPersonalizedFeedEnabled()) {
+        console.warn('⚠️ Personalized feed is ENABLED - may experience slow load times (>30s)');
+      } else {
+        console.info('ℹ️ Running in simple feed mode (fast & optimized)');
+      }
+
+      // Use simple feed function (personalized feed can be enabled via feature flag)
       const { data: feedData, error } = await supabase.rpc('get_simple_feed', {
         p_user_id: session.user.id,
         p_limit: 10,
