@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VerticalFeed } from "@/components/VerticalFeed";
@@ -75,23 +75,25 @@ const Index = () => {
   }
 
   return (
-    <div className="relative bg-background min-h-screen">
-      <PWAInstallPrompt />
-      
-      <div className="flex justify-center">
-        <div className="relative w-full max-w-md">
-          <ErrorBoundary>
-            <VerticalFeed />
-          </ErrorBoundary>
-          
-          {showUpload && (
-            <UploadButton onClose={() => setShowUpload(false)} />
-          )}
-          
-          <BottomNav onUploadClick={handleUploadClick} userProfile={profile} />
+    <ErrorBoundary>
+      <div className="relative bg-background min-h-screen">
+        <PWAInstallPrompt />
+        
+        <div className="flex justify-center">
+          <div className="relative w-full max-w-md">
+            <ErrorBoundary>
+              <VerticalFeed />
+            </ErrorBoundary>
+            
+            {showUpload && (
+              <UploadButton onClose={() => setShowUpload(false)} />
+            )}
+            
+            <BottomNav onUploadClick={handleUploadClick} userProfile={profile} />
+          </div>
         </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 };
 

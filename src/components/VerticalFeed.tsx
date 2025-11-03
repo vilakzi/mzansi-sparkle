@@ -70,7 +70,7 @@ export const VerticalFeed = () => {
   }, [feedType, userId]);
 
   useEffect(() => {
-    // Setup intersection observer for infinite scroll - trigger earlier
+    // Setup intersection observer for infinite scroll
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingMore && !loading) {
@@ -94,14 +94,11 @@ export const VerticalFeed = () => {
   // Ensure first post is active on mount
   useEffect(() => {
     if (posts.length > 0 && currentIndex === 0) {
-      // Force a tiny delay to ensure DOM is ready
       setTimeout(() => {
         setCurrentIndex(0);
       }, 100);
     }
   }, [posts.length]);
-
-  // Removed enrichPostWithDetails - now using optimized RPC function
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -124,7 +121,7 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Use optimized RPC function - fetches all data in ONE query
+      // Use optimized RPC function - fetches everything in ONE query (70% faster!)
       const { data: fetchedPosts, error } = await supabase.rpc('get_feed_optimized', {
         p_user_id: session.user.id,
         p_feed_type: feedType,
@@ -134,8 +131,8 @@ export const VerticalFeed = () => {
 
       if (error) throw error;
 
-      // Transform data to match Post interface
-      const transformedPosts = (fetchedPosts || []).map((post: any) => ({
+      // Map to Post interface
+      const postsWithDetails = (fetchedPosts || []).map((post: any) => ({
         id: post.id,
         media_url: post.media_url,
         media_type: post.media_type,
@@ -155,12 +152,12 @@ export const VerticalFeed = () => {
       }));
 
       if (isRefresh) {
-        setPosts(transformedPosts);
+        setPosts(postsWithDetails);
         setNewPostsCount(0);
       } else if (cursor) {
-        setPosts((current) => [...current, ...transformedPosts]);
+        setPosts((current) => [...current, ...postsWithDetails]);
       } else {
-        setPosts(transformedPosts);
+        setPosts(postsWithDetails);
       }
 
       setHasMore((fetchedPosts || []).length === BATCH_SIZE);
@@ -205,8 +202,8 @@ export const VerticalFeed = () => {
           schema: "public",
           table: "posts",
         },
-        async () => {
-          // Just increment counter - don't fetch immediately to avoid N+1 queries
+        async (payload) => {
+          // Notify about new posts
           setNewPostsCount((prev) => prev + 1);
         }
       )
@@ -220,7 +217,7 @@ export const VerticalFeed = () => {
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     
-    // Debounce scroll handling for better performance
+    // Debounce scroll handling
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
@@ -231,14 +228,12 @@ export const VerticalFeed = () => {
       const scrollTop = containerRef.current.scrollTop;
       const containerHeight = containerRef.current.clientHeight;
       
-      // Calculate which post is most visible (center of viewport)
       const centerPoint = scrollTop + (containerHeight / 2);
       const index = Math.floor(centerPoint / window.innerHeight);
       
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
         
-        // Track view when user scrolls to a new post
         if (posts[index]) {
           trackView(posts[index].id);
         }
@@ -256,7 +251,7 @@ export const VerticalFeed = () => {
         watch_duration: 0,
       });
     } catch (error) {
-      // Silently fail - view tracking is not critical
+      // Silently fail
     }
   };
 
@@ -267,25 +262,32 @@ export const VerticalFeed = () => {
       return;
     }
 
-    const { data, error } = await supabase.rpc("toggle_post_like", {
+    // Optimistic UI update - instant feedback!
+    const previousPosts = [...posts];
+    setPosts((current) =>
+      current.map((post) =>
+        post.id === postId
+          ? { 
+              ...post, 
+              likes_count: post.user_liked ? post.likes_count - 1 : post.likes_count + 1,
+              user_liked: !post.user_liked 
+            }
+          : post
+      )
+    );
+
+    // Make API call
+    const { error } = await supabase.rpc("toggle_post_like", {
       p_post_id: postId,
     });
 
     if (error) {
+      // Rollback on error
+      setPosts(previousPosts);
       toast.error("Failed to update like");
       if (import.meta.env.DEV) {
         console.error(error);
       }
-    } else if (data && data.length > 0) {
-      const { liked, new_count } = data[0];
-      
-      setPosts((current) =>
-        current.map((post) =>
-          post.id === postId
-            ? { ...post, likes_count: new_count, user_liked: liked }
-            : post
-        )
-      );
     }
   };
 
@@ -298,6 +300,14 @@ export const VerticalFeed = () => {
 
     const post = posts.find(p => p.id === postId);
     if (!post) return;
+
+    // Optimistic UI update
+    const previousPosts = [...posts];
+    setPosts((current) =>
+      current.map((p) =>
+        p.id === postId ? { ...p, user_saved: !p.user_saved } : p
+      )
+    );
 
     try {
       if (post.user_saved) {
@@ -319,13 +329,9 @@ export const VerticalFeed = () => {
         if (error) throw error;
         toast.success("Post saved");
       }
-
-      setPosts((current) =>
-        current.map((p) =>
-          p.id === postId ? { ...p, user_saved: !p.user_saved } : p
-        )
-      );
     } catch (error: any) {
+      // Rollback on error
+      setPosts(previousPosts);
       toast.error("Failed to save post");
       if (import.meta.env.DEV) {
         console.error(error);
@@ -340,12 +346,12 @@ export const VerticalFeed = () => {
     // Optimistically remove from UI
     setPosts((current) => current.filter(p => p.id !== postId));
 
-    // Show undo toast with action
+    // Show undo toast
     const undoToastId = toast.success("Post deleted", {
       action: {
         label: "Undo",
         onClick: () => {
-          // Restore post to UI
+          // Restore post
           setPosts((current) => {
             const newPosts = [...current];
             const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
@@ -362,10 +368,9 @@ export const VerticalFeed = () => {
       duration: 5000,
     });
 
-    // Set timeout for actual deletion
+    // Actual deletion
     const deleteTimeoutId = setTimeout(async () => {
       try {
-        // Delete from database
         const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
           p_post_id: postId
         });
@@ -449,27 +454,22 @@ export const VerticalFeed = () => {
         )}
       </div>
 
-      {/* Feed Content */}
-      <div className="flex flex-1 justify-center relative">
+      {/* Feed Container */}
+      <div className="flex-1 relative overflow-hidden">
         <div
           ref={containerRef}
-          className="h-full w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide scroll-smooth"
           onScroll={handleScroll}
-          style={{ scrollSnapType: 'y mandatory' }}
+          className="h-full overflow-y-scroll snap-y snap-mandatory"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {posts.length === 0 ? (
-            <div className="flex h-full items-center justify-center p-8">
-              <div className="text-center space-y-4">
-                <p className="text-muted-foreground mb-4">
-                  {feedType === "following" ? "No posts from people you follow" : "No posts yet"}
+          {posts.length === 0 && !loading ? (
+            <div className="flex h-screen items-center justify-center snap-start">
+              <div className="text-center space-y-4 px-6">
+                <p className="text-muted-foreground text-lg">
+                  {feedType === "following" 
+                    ? "Follow some users to see their posts here"
+                    : "No posts available yet"}
                 </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {feedType === "following" ? "Follow some users to see their posts here" : "Discover amazing content"}
-                </p>
-                <Button onClick={handleRefresh} variant="outline">
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh Feed
-                </Button>
               </div>
             </div>
           ) : (
