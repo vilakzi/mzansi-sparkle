@@ -812,35 +812,60 @@ export type Database = {
         Args: { p_other_user_id: string }
         Returns: string
       }
-      get_simple_feed: {
-        Args: {
-          p_feed_type?: string
-          p_limit?: number
-          p_offset?: number
-          p_user_id: string
-        }
-        Returns: {
-          avatar_url: string
-          bio: string
-          caption: string
-          comments_count: number
-          created_at: string
-          display_name: string
-          followers_count: number
-          following_count: number
-          id: string
-          is_liked: boolean
-          is_saved: boolean
-          likes_count: number
-          media_type: string
-          media_url: string
-          saves_count: number
-          shares_count: number
-          user_id: string
-          username: string
-          views_count: number
-        }[]
-      }
+      get_simple_feed:
+        | {
+            Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+            Returns: {
+              avatar_url: string
+              bio: string
+              caption: string
+              comments_count: number
+              created_at: string
+              display_name: string
+              followers_count: number
+              following_count: number
+              id: string
+              is_liked: boolean
+              is_saved: boolean
+              likes_count: number
+              media_type: string
+              media_url: string
+              saves_count: number
+              shares_count: number
+              user_id: string
+              username: string
+              views_count: number
+            }[]
+          }
+        | {
+            Args: {
+              p_feed_type?: string
+              p_limit?: number
+              p_offset?: number
+              p_user_id: string
+            }
+            Returns: {
+              avatar_url: string
+              bio: string
+              caption: string
+              comments_count: number
+              created_at: string
+              display_name: string
+              followers_count: number
+              following_count: number
+              id: string
+              is_liked: boolean
+              is_saved: boolean
+              likes_count: number
+              media_type: string
+              media_url: string
+              saves_count: number
+              shares_count: number
+              user_id: string
+              username: string
+              views_count: number
+            }[]
+          }
       get_trending_posts: {
         Args: { limit_count?: number }
         Returns: {
