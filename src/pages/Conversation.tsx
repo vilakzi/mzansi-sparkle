@@ -15,8 +15,6 @@ interface Message {
   content: string;
   sender_id: string;
   created_at: string;
-  media_url: string | null;
-  media_type: string | null;
 }
 
 interface OtherUser {

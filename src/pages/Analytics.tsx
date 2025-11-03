@@ -100,15 +100,8 @@ const Analytics = () => {
         media_url: post.media_url,
       })) || [];
 
-      // Fetch category distribution
-      const { data: categoryData } = await supabase
-        .from("post_categories")
-        .select("name, posts_count");
-
-      const categoryDistribution = categoryData?.map(cat => ({
-        name: cat.name,
-        value: cat.posts_count,
-      })) || [];
+      // Category distribution - feature coming soon
+      const categoryDistribution: any[] = [];
 
       // Fetch engagement trend (last 7 days)
       const sevenDaysAgo = new Date();
