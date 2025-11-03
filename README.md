@@ -59,6 +59,23 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase
+
+## Feed Performance Feature Flag
+
+The app includes a feature flag system for controlling feed algorithms:
+
+```bash
+# .env file
+VITE_PERSONALIZED_FEED="false"  # Default: fast simple feed
+```
+
+To validate feed performance:
+```bash
+npm run validate-feed
+```
+
+See [docs/rollback-feed.md](docs/rollback-feed.md) for detailed documentation on the feed rollback system.
 
 ## How can I deploy this project?
 
