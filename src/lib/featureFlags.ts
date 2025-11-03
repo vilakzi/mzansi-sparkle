@@ -2,8 +2,8 @@
  * Feature Flags Configuration
  * 
  * This module provides runtime feature flag utilities for the application.
- * Feature flags are read from environment variables prefixed with NEXT_PUBLIC_
- * to ensure they're available in the browser.
+ * Feature flags are read from environment variables prefixed with VITE_
+ * to ensure they're available in the browser (Vite convention).
  */
 
 /**
