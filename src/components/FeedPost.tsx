@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -694,3 +694,19 @@ export const FeedPost = ({
     </div>
   );
 };
+
+const MemoizedFeedPost = memo(FeedPost, (prevProps, nextProps) => {
+  // Custom comparison function to prevent re-renders
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.isLiked === nextProps.isLiked &&
+    prevProps.isSaved === nextProps.isSaved &&
+    prevProps.likesCount === nextProps.likesCount &&
+    prevProps.commentsCount === nextProps.commentsCount &&
+    // Deep compare profile object
+    JSON.stringify(prevProps.profile) === JSON.stringify(nextProps.profile)
+  );
+});
+
+export { MemoizedFeedPost as FeedPost };
