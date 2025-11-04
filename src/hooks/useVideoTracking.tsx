@@ -64,12 +64,18 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
       try {
         const { data: { user } } = await supabase.auth.getUser();
 
+        // Only insert basic view tracking - post_views table doesn't have watch_duration/completion_rate
         await supabase.from("post_views").insert({
           post_id: postId,
           user_id: user?.id || null,
-          session_id: sessionId,
-          watch_duration: duration,
-          completion_rate: completionRate,
+        });
+        
+        console.log('[useVideoTracking] View tracked:', {
+          postId,
+          userId: user?.id,
+          sessionId,
+          watchDuration: duration,
+          completionRate: completionRate.toFixed(2),
         });
       } catch (error) {
         console.error("Error tracking video view:", error);
