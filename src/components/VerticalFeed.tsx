@@ -147,7 +147,7 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Simple direct query - respects RLS automatically
+      // Simple direct query - specify the relationship explicitly
       const { data: fetchedPosts, error } = await supabase
         .from('posts')
         .select(`
@@ -162,7 +162,7 @@ export const VerticalFeed = () => {
           views_count,
           created_at,
           user_id,
-          profiles!inner(username, display_name, avatar_url, bio, followers_count, following_count)
+          profiles!posts_user_id_fkey(username, display_name, avatar_url)
         `)
         .order('created_at', { ascending: false })
         .range(offset, offset + BATCH_SIZE - 1);
