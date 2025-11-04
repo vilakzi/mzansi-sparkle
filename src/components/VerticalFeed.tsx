@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 import { RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
+import { prefetchVideos } from "@/lib/pwaUtils";
 
 interface Post {
   id: string;
@@ -198,6 +199,19 @@ export const VerticalFeed = () => {
           avatar_url: post.profiles.avatar_url
         }
       }));
+
+      // Prefetch videos for instant playback (PWA caching)
+      const videoUrls = postsWithDetails
+        .filter(post => post.media_type === 'video')
+        .slice(0, 5) // Prefetch first 5 videos
+        .map(post => post.media_url);
+      
+      if (videoUrls.length > 0) {
+        console.log(`[VerticalFeed] Prefetching ${videoUrls.length} videos for offline playback`);
+        prefetchVideos(videoUrls).catch(err => 
+          console.warn('[VerticalFeed] Video prefetch failed:', err)
+        );
+      }
 
       if (isRefresh) {
         setPosts(postsWithDetails);
