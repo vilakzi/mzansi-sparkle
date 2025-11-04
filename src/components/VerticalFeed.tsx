@@ -147,15 +147,37 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Use optimized RPC function with smart rotation
-      const { data: fetchedPosts, error } = await supabase.rpc('get_feed_optimized', {
-        p_user_id: session.user.id,
-        p_feed_type: 'for-you',
-        p_limit: BATCH_SIZE,
-        p_offset: offset
-      });
+      // Simple direct query - respects RLS automatically
+      const { data: fetchedPosts, error } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          media_url,
+          media_type,
+          caption,
+          likes_count,
+          comments_count,
+          shares_count,
+          saves_count,
+          views_count,
+          created_at,
+          user_id,
+          profiles!inner(username, display_name, avatar_url, bio, followers_count, following_count)
+        `)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + BATCH_SIZE - 1);
 
       if (error) throw error;
+
+      // Check if user liked/saved each post
+      const postIds = (fetchedPosts || []).map(p => p.id);
+      const [likesData, savesData] = await Promise.all([
+        supabase.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', session.user.id),
+        supabase.from('saved_posts').select('post_id').in('post_id', postIds).eq('user_id', session.user.id)
+      ]);
+
+      const likedPostIds = new Set(likesData.data?.map(l => l.post_id) || []);
+      const savedPostIds = new Set(savesData.data?.map(s => s.post_id) || []);
 
       // Map to Post interface
       const postsWithDetails = (fetchedPosts || []).map((post: any) => ({
@@ -168,12 +190,12 @@ export const VerticalFeed = () => {
         shares_count: post.shares_count,
         created_at: post.created_at,
         user_id: post.user_id,
-        user_liked: post.is_liked,
-        user_saved: post.is_saved,
+        user_liked: likedPostIds.has(post.id),
+        user_saved: savedPostIds.has(post.id),
         profile: {
-          display_name: post.display_name,
-          username: post.username,
-          avatar_url: post.avatar_url
+          display_name: post.profiles.display_name,
+          username: post.profiles.username,
+          avatar_url: post.profiles.avatar_url
         }
       }));
 
@@ -185,8 +207,8 @@ export const VerticalFeed = () => {
         setPosts(postsWithDetails);
       }
 
-      // Always keep hasMore = true for infinite feed (smart rotation ensures endless content)
-      setHasMore(true);
+      // Check if we have more posts
+      setHasMore(fetchedPosts && fetchedPosts.length === BATCH_SIZE);
       
       setLoading(false);
       setLoadingMore(false);
@@ -216,47 +238,9 @@ export const VerticalFeed = () => {
       // Get timestamp of newest post in current feed
       const newestPostTime = posts[0]?.created_at;
       
-      if (newestPostTime) {
-        // Fetch posts newer than what we have
-        const { data: newPosts } = await supabase.rpc('get_new_posts_since', {
-          p_user_id: userId,
-          p_feed_type: 'for-you',
-          p_since: newestPostTime,
-          p_limit: 20
-        });
-        
-        if (newPosts && newPosts.length > 0) {
-          // Map new posts
-          const mappedNewPosts = newPosts.map((post: any) => ({
-            id: post.id,
-            media_url: post.media_url,
-            media_type: post.media_type,
-            caption: post.caption,
-            likes_count: post.likes_count,
-            comments_count: post.comments_count,
-            shares_count: post.shares_count,
-            created_at: post.created_at,
-            user_id: post.user_id,
-            user_liked: post.is_liked,
-            user_saved: post.is_saved,
-            profile: {
-              display_name: post.display_name,
-              username: post.username,
-              avatar_url: post.avatar_url
-            }
-          }));
-          
-          setPosts(prev => [...mappedNewPosts, ...prev]);
-          toast.success(`${newPosts.length} new post${newPosts.length === 1 ? '' : 's'} loaded`);
-          scrollToTop();
-          setIsRefreshing(false);
-          return;
-        }
-      }
-      
-      // No new posts - do full refresh with smart rotation
+      // Just do a full refresh
       await fetchPosts(undefined, true);
-      toast.success("Feed refreshed with fresh content");
+      toast.success("Feed refreshed");
     } catch (error) {
       console.error('Refresh error:', error);
       toast.error("Failed to refresh feed");
