@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { FeedPost } from "./FeedPost";
 import { PostErrorBoundary } from "./PostErrorBoundary";
 import { toast } from "sonner";
@@ -35,15 +36,11 @@ export const VerticalFeed = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [windowStart, setWindowStart] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Production-grade settings for memory and performance
-  const WINDOW_SIZE = 5; // Keep only 5 posts in DOM
-  const PRELOAD_COUNT = 2; // Preload 2 videos ahead
   const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
 
   useEffect(() => {
@@ -96,36 +93,6 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
-  // Smart preloading with windowing for memory efficiency
-  useEffect(() => {
-    if (!containerRef.current || posts.length === 0) return;
-
-    // Preload current + PRELOAD_COUNT ahead
-    for (let i = currentIndex; i <= Math.min(currentIndex + PRELOAD_COUNT, posts.length - 1); i++) {
-      const postElement = containerRef.current.querySelector(`[data-post-index="${i}"]`);
-      if (postElement) {
-        const video = postElement.querySelector('video');
-        if (video && video.readyState < 2) {
-          video.load();
-        }
-      }
-    }
-
-    // Aggressive memory cleanup - unload videos far from current
-    posts.forEach((_, index) => {
-      if (Math.abs(index - currentIndex) > WINDOW_SIZE) {
-        const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
-        if (postElement) {
-          const video = postElement.querySelector('video');
-          if (video) {
-            video.pause();
-            video.src = '';
-            video.load();
-          }
-        }
-      }
-    });
-  }, [currentIndex, posts, WINDOW_SIZE, PRELOAD_COUNT]);
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -146,72 +113,14 @@ export const VerticalFeed = () => {
       }
 
       const BATCH_SIZE = 20;
-      const offset = cursor ? posts.length : 0;
+      const pageNum = isRefresh ? 1 : (cursor ? Math.floor(posts.length / BATCH_SIZE) + 1 : 1);
 
-      // Simple direct query - specify the relationship explicitly
-      const { data: fetchedPosts, error } = await supabase
-        .from('posts')
-        .select(`
-          id,
-          media_url,
-          media_type,
-          caption,
-          likes_count,
-          comments_count,
-          shares_count,
-          saves_count,
-          views_count,
-          created_at,
-          user_id,
-          profiles!posts_user_id_fkey(username, display_name, avatar_url)
-        `)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + BATCH_SIZE - 1);
-
+      // Call the optimized RPC function
+      const { data: postsWithDetails, error } = await supabase.rpc('get_feed_posts', {
+        p_batch_size: BATCH_SIZE,
+        p_page_num: pageNum
+      });
       if (error) throw error;
-
-      // Check if user liked/saved each post
-      const postIds = (fetchedPosts || []).map(p => p.id);
-      const [likesData, savesData] = await Promise.all([
-        supabase.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', session.user.id),
-        supabase.from('saved_posts').select('post_id').in('post_id', postIds).eq('user_id', session.user.id)
-      ]);
-
-      const likedPostIds = new Set(likesData.data?.map(l => l.post_id) || []);
-      const savedPostIds = new Set(savesData.data?.map(s => s.post_id) || []);
-
-      // Map to Post interface
-      const postsWithDetails = (fetchedPosts || []).map((post: any) => ({
-        id: post.id,
-        media_url: post.media_url,
-        media_type: post.media_type,
-        caption: post.caption,
-        likes_count: post.likes_count,
-        comments_count: post.comments_count,
-        shares_count: post.shares_count,
-        created_at: post.created_at,
-        user_id: post.user_id,
-        user_liked: likedPostIds.has(post.id),
-        user_saved: savedPostIds.has(post.id),
-        profile: {
-          display_name: post.profiles.display_name,
-          username: post.profiles.username,
-          avatar_url: post.profiles.avatar_url
-        }
-      }));
-
-      // Prefetch videos for instant playback (PWA caching)
-      const videoUrls = postsWithDetails
-        .filter(post => post.media_type === 'video')
-        .slice(0, 5) // Prefetch first 5 videos
-        .map(post => post.media_url);
-      
-      if (videoUrls.length > 0) {
-        console.log(`[VerticalFeed] Prefetching ${videoUrls.length} videos for offline playback`);
-        prefetchVideos(videoUrls).catch(err => 
-          console.warn('[VerticalFeed] Video prefetch failed:', err)
-        );
-      }
 
       if (isRefresh) {
         setPosts(postsWithDetails);
@@ -222,7 +131,7 @@ export const VerticalFeed = () => {
       }
 
       // Check if we have more posts
-      setHasMore(fetchedPosts && fetchedPosts.length === BATCH_SIZE);
+      setHasMore(postsWithDetails && postsWithDetails.length === BATCH_SIZE);
       
       setLoading(false);
       setLoadingMore(false);
@@ -249,9 +158,6 @@ export const VerticalFeed = () => {
     setIsRefreshing(true);
     
     try {
-      // Get timestamp of newest post in current feed
-      const newestPostTime = posts[0]?.created_at;
-      
       // Just do a full refresh
       await fetchPosts(undefined, true);
       toast.success("Feed refreshed");
@@ -280,7 +186,29 @@ export const VerticalFeed = () => {
           table: "posts",
         },
         async (payload) => {
-          // New post added - could fetch if needed
+          const newPostId = payload.new.id;
+
+          // Fetch the full post details using the RPC function
+          const { data: postDetails, error } = await supabase.rpc('get_feed_posts', {
+            p_batch_size: 1,
+            p_page_num: 1
+          });
+
+          if (error || !postDetails || postDetails.length === 0) {
+            console.error("Error fetching new post details:", error);
+            return;
+          }
+
+          const newPost = postDetails[0];
+
+          // Check for duplicates before adding
+          setPosts((current) => {
+            if (current.some(p => p.id === newPost.id)) {
+              return current;
+            }
+            return [newPost, ...current];
+          });
+          toast.info("New post from someone you follow!");
         }
       )
       .subscribe();
@@ -310,10 +238,6 @@ export const VerticalFeed = () => {
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
         
-        // Update window for virtualization
-        const newWindowStart = Math.max(0, index - Math.floor(WINDOW_SIZE / 2));
-        setWindowStart(newWindowStart);
-        
         if (posts[index]) {
           trackView(posts[index].id);
         }
@@ -326,6 +250,16 @@ export const VerticalFeed = () => {
       }
     }, 100);
   }, [currentIndex, posts, loadingMore, hasMore]);
+
+  // Preload the next video for smoother playback
+  useEffect(() => {
+    const nextPostIndex = currentIndex + 1;
+    if (nextPostIndex < posts.length && posts[nextPostIndex].media_type === 'video') {
+      const video = document.createElement('video');
+      video.src = posts[nextPostIndex].media_url;
+      video.preload = 'auto';
+    }
+  }, [currentIndex, posts]);
 
   const markPostAsSeen = async (postId: string) => {
     if (!userId) return;
@@ -360,7 +294,7 @@ export const VerticalFeed = () => {
     }
   };
 
-  const handleLike = async (postId: string) => {
+  const handleLike = useCallback(async (postId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Please sign in to like posts");
@@ -394,9 +328,9 @@ export const VerticalFeed = () => {
         console.error(error);
       }
     }
-  };
+  }, [posts]);
 
-  const handleSaveToggle = async (postId: string) => {
+  const handleSaveToggle = useCallback(async (postId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Please sign in to save posts");
@@ -442,9 +376,9 @@ export const VerticalFeed = () => {
         console.error(error);
       }
     }
-  };
+  }, [posts]);
 
-  const handleDeletePost = async (postId: string) => {
+  const handleDeletePost = useCallback(async (postId: string) => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
 
@@ -501,7 +435,13 @@ export const VerticalFeed = () => {
         toast.error("Failed to delete post");
       }
     }, 5000);
-  };
+  }, [posts]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: posts.length,
+    getScrollElement: () => containerRef.current,
+    itemSize: () => window.innerHeight,
+  });
 
   if (loading && posts.length === 0) {
     return <FeedLoadingSkeleton />;
@@ -549,34 +489,52 @@ export const VerticalFeed = () => {
             </div>
           ) : (
             <>
-              {posts.map((post, index) => (
-                <div
-                  key={`${post.id}-${index}`}
-                  ref={index === posts.length - 8 ? lastPostRef : null}
-                  data-post-index={index}
-                  className="snap-start snap-always will-change-transform"
-                >
-                  <PostErrorBoundary postId={post.id}>
-                    <FeedPost
-                      id={post.id}
-                      mediaUrl={post.media_url}
-                      mediaType={post.media_type}
-                      caption={post.caption}
-                      likesCount={post.likes_count}
-                      commentsCount={post.comments_count}
-                      sharesCount={post.shares_count}
-                      isSaved={post.user_saved || false}
-                      isLiked={post.user_liked || false}
-                      isActive={index === currentIndex}
-                      onLike={() => handleLike(post.id)}
-                      onSaveToggle={() => handleSaveToggle(post.id)}
-                      onDelete={() => handleDeletePost(post.id)}
-                      userId={post.user_id}
-                      profile={post.profile}
-                    />
-                  </PostErrorBoundary>
-                </div>
-              ))}
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+                  const post = posts[virtualItem.index];
+                  return (
+                    <div
+                      key={virtualItem.key}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${virtualItem.size}px`,
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                      className="snap-start snap-always"
+                      ref={virtualItem.index === posts.length - 8 ? lastPostRef : null}
+                    >
+                      <PostErrorBoundary postId={post.id}>
+                        <FeedPost
+                          id={post.id}
+                          mediaUrl={post.media_url}
+                          mediaType={post.media_type}
+                          caption={post.caption}
+                          likesCount={post.likes_count}
+                          commentsCount={post.comments_count}
+                          sharesCount={post.shares_count}
+                          isSaved={post.user_saved || false}
+                          isLiked={post.user_liked || false}
+                          isActive={virtualItem.index === currentIndex}
+                          onLike={() => handleLike(post.id)}
+                          onSaveToggle={() => handleSaveToggle(post.id)}
+                          onDelete={() => handleDeletePost(post.id)}
+                          userId={post.user_id}
+                          profile={post.profile}
+                        />
+                      </PostErrorBoundary>
+                    </div>
+                  );
+                })}
+              </div>
               {loadingMore && (
                 <div className="flex h-screen items-center justify-center snap-start">
                   <div className="text-center space-y-4 animate-fade-in">
