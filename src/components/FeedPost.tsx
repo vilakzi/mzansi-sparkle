@@ -80,6 +80,7 @@ export const FeedPost = ({
     isNetworkError: boolean;
   } | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [hasAutoRetried, setHasAutoRetried] = useState(false);
   
   const MAX_RETRIES = 1; // Reduced for faster error detection
 
@@ -164,22 +165,25 @@ export const FeedPost = ({
         }
       }, delay);
     } else {
-      console.error('[FeedPost] Max retries reached or offline, showing error state with auto-retry');
+      console.error('[FeedPost] Max retries reached or offline, showing error state');
       setMediaError({
         type: errorType,
         message: errorMessage,
         isNetworkError,
       });
       
-      // Auto-dismiss error and retry after 2 seconds
-      setTimeout(() => {
-        console.log('[FeedPost] Auto-dismissing error and retrying...');
-        setMediaError(null);
-        setRetryCount(0);
-        if (videoRef.current) {
-          videoRef.current.load();
-        }
-      }, 2000);
+      // Auto-retry once after 2 seconds, then show persistent error
+      if (!hasAutoRetried && isOnline) {
+        setTimeout(() => {
+          console.log('[FeedPost] Auto-dismissing error and performing final retry...');
+          setHasAutoRetried(true);
+          setMediaError(null);
+          setRetryCount(0);
+          if (videoRef.current) {
+            videoRef.current.load();
+          }
+        }, 2000);
+      }
     }
   };
 
@@ -474,6 +478,7 @@ export const FeedPost = ({
                   console.log('[FeedPost] Manual retry initiated by user');
                   setMediaError(null);
                   setRetryCount(0);
+                  setHasAutoRetried(false); // Reset auto-retry flag for manual retry
                   if (videoRef.current) videoRef.current.load();
                 }}
               >
