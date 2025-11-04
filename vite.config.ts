@@ -13,7 +13,8 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
-    VitePWA({
+    // Only enable PWA in production builds
+    mode === "production" && VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt"],
       manifest: {
@@ -50,8 +51,8 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: "video-cache",
               expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days for videos
+                maxEntries: 50,
+                maxAgeSeconds: 7 * 24 * 60 * 60 // 7 days for videos
               },
               cacheableResponse: {
                 statuses: [0, 200]
@@ -64,8 +65,8 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: "supabase-api-cache",
               expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 // 24 hours for API
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 60 // 1 hour for API
               },
               cacheableResponse: {
                 statuses: [0, 200]
