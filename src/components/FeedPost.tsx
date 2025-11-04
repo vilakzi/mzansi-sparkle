@@ -86,35 +86,8 @@ export const FeedPost = ({
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Check network connectivity
-  const checkNetworkConnectivity = async (): Promise<boolean> => {
-    try {
-      // Check browser online status first
-      if (!navigator.onLine) {
-        console.error('[FeedPost] Network offline - navigator.onLine is false');
-        return false;
-      }
-
-      // Try to fetch a small resource to verify actual connectivity
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      
-      const response = await fetch(import.meta.env.VITE_SUPABASE_URL + '/rest/v1/', {
-        method: 'HEAD',
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      console.log('[FeedPost] Network connectivity check:', response.ok ? 'OK' : 'FAILED');
-      return response.ok;
-    } catch (error) {
-      console.error('[FeedPost] Network connectivity check failed:', error);
-      return false;
-    }
-  };
-
   // Enhanced media error handling with detailed logging
-  const handleMediaError = async () => {
+  const handleMediaError = () => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -133,8 +106,8 @@ export const FeedPost = ({
     console.error('[FeedPost] Video ready state:', video.readyState);
     console.error('[FeedPost] Video network state:', video.networkState);
 
-    // Check network connectivity
-    const isOnline = await checkNetworkConnectivity();
+    // Use simple navigator.onLine check
+    const isOnline = navigator.onLine;
 
     let errorType = 'Unknown Error';
     let errorMessage = 'Unable to load video. Please try again.';
