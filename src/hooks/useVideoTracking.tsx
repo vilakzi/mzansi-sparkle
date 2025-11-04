@@ -105,7 +105,7 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
         handlePause();
       }
     };
-  }, [postId, isActive, videoRef]);
+  }, [postId, isActive]);
 
   return sessionIdRef.current;
 };
