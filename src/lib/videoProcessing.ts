@@ -4,7 +4,7 @@
  */
 
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_VIDEO_DURATION = 60; // 60 seconds
+const MAX_VIDEO_DURATION = 90; // 90 seconds
 const MAX_VIDEO_WIDTH = 1280;
 const MAX_VIDEO_HEIGHT = 720;
 
