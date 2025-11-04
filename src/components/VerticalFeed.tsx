@@ -335,7 +335,6 @@ export const VerticalFeed = () => {
       await supabase.from("post_views").insert({
         post_id: postId,
         user_id: user?.id || null,
-        watch_duration: 0,
       });
 
       // Mark post as seen for smart feed rotation
