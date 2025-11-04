@@ -33,7 +33,15 @@ const App = () => {
       await clearOldCaches();
       
       console.log('[App] PWA initialized with hot-reload support');
-      console.log('[App] Videos will be cached aggressively for offline playback');
+      console.log('[App] Videos will be cached adaptively based on network quality');
+      
+      // Check if PWA is installable
+      const isInstalled = window.matchMedia('(display-mode: standalone)').matches;
+      if (isInstalled) {
+        console.log('[App] Running as installed PWA');
+      } else {
+        console.log('[App] Running in browser - install prompt may appear');
+      }
     };
 
     initPWA();

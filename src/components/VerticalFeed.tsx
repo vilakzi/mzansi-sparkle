@@ -42,7 +42,7 @@ export const VerticalFeed = () => {
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Production-grade settings for memory and performance
-  const WINDOW_SIZE = 5; // Keep only 5 posts in DOM
+  const WINDOW_SIZE = 3; // Keep only 3 posts in DOM (reduced for mobile)
   const PRELOAD_COUNT = 2; // Preload 2 videos ahead
   const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
 
@@ -200,17 +200,25 @@ export const VerticalFeed = () => {
         }
       }));
 
-      // Prefetch videos for instant playback (PWA caching)
+      // Smart video prefetching based on network quality
+      const connection = (navigator as any).connection;
+      const effectiveType = connection?.effectiveType || '4g';
+      const isSlowConnection = ['slow-2g', '2g', '3g'].includes(effectiveType);
+      
+      // Reduce prefetch on slow networks
+      const prefetchLimit = isSlowConnection ? 2 : 3;
       const videoUrls = postsWithDetails
         .filter(post => post.media_type === 'video')
-        .slice(0, 5) // Prefetch first 5 videos
+        .slice(0, prefetchLimit)
         .map(post => post.media_url);
       
-      if (videoUrls.length > 0) {
-        console.log(`[VerticalFeed] Prefetching ${videoUrls.length} videos for offline playback`);
+      if (videoUrls.length > 0 && !isSlowConnection) {
+        console.log(`[VerticalFeed] Prefetching ${videoUrls.length} videos (Network: ${effectiveType})`);
         prefetchVideos(videoUrls).catch(err => 
           console.warn('[VerticalFeed] Video prefetch failed:', err)
         );
+      } else if (isSlowConnection) {
+        console.log(`[VerticalFeed] Skipping prefetch on slow network (${effectiveType})`);
       }
 
       if (isRefresh) {
@@ -324,7 +332,7 @@ export const VerticalFeed = () => {
       if (postsRemaining <= LOAD_TRIGGER && !loadingMore && hasMore) {
         loadMore();
       }
-    }, 100);
+    }, 150); // Increased debounce for better mobile performance
   }, [currentIndex, posts, loadingMore, hasMore]);
 
   const markPostAsSeen = async (postId: string) => {

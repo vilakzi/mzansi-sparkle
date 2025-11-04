@@ -120,16 +120,21 @@ export const getNetworkStatus = (): {
   effectiveType?: string;
   downlink?: number;
   rtt?: number;
+  isSlowConnection: boolean;
 } => {
   const connection = (navigator as any).connection || 
                      (navigator as any).mozConnection || 
                      (navigator as any).webkitConnection;
   
+  const effectiveType = connection?.effectiveType || '4g';
+  const isSlowConnection = ['slow-2g', '2g', '3g'].includes(effectiveType);
+  
   return {
     online: navigator.onLine,
-    effectiveType: connection?.effectiveType,
+    effectiveType,
     downlink: connection?.downlink,
     rtt: connection?.rtt,
+    isSlowConnection,
   };
 };
 

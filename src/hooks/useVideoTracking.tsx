@@ -11,6 +11,7 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
   const sessionIdRef = useRef<string>(`${Date.now()}-${Math.random()}`);
   const startTimeRef = useRef<number>(0);
   const hasTrackedViewRef = useRef<boolean>(false);
+  const lastCheckTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isActive || !videoRef.current) return;
@@ -41,21 +42,27 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
     };
 
     const handleTimeUpdate = async () => {
+      // Debounce: only check once per second to prevent excessive DB writes
+      const now = Date.now();
+      if (now - lastCheckTimeRef.current < 1000) return;
+      lastCheckTimeRef.current = now;
+
+      // Already tracked, skip further checks
+      if (hasTrackedViewRef.current) return;
+
       if (video.currentTime > 0 && video.duration > 0) {
         const currentCompletionRate = video.currentTime / video.duration;
         
         // Track view when user watches at least 50% or 3 seconds (whichever comes first)
-        if (!hasTrackedViewRef.current) {
-          const watchedEnough = currentCompletionRate >= 0.5 || video.currentTime >= 3;
+        const watchedEnough = currentCompletionRate >= 0.5 || video.currentTime >= 3;
+        
+        if (watchedEnough) {
+          const currentWatchTime = startTimeRef.current 
+            ? watchDuration + (Date.now() - startTimeRef.current) / 1000
+            : watchDuration;
           
-          if (watchedEnough) {
-            const currentWatchTime = startTimeRef.current 
-              ? watchDuration + (Date.now() - startTimeRef.current) / 1000
-              : watchDuration;
-            
-            await trackView(sessionId, Math.floor(currentWatchTime), currentCompletionRate);
-            hasTrackedViewRef.current = true;
-          }
+          await trackView(sessionId, Math.floor(currentWatchTime), currentCompletionRate);
+          hasTrackedViewRef.current = true;
         }
       }
     };
