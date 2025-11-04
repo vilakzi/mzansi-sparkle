@@ -180,25 +180,36 @@ export const VerticalFeed = () => {
       const likedPostIds = new Set(likesData.data?.map(l => l.post_id) || []);
       const savedPostIds = new Set(savesData.data?.map(s => s.post_id) || []);
 
-      // Map to Post interface
-      const postsWithDetails = (fetchedPosts || []).map((post: any) => ({
-        id: post.id,
-        media_url: post.media_url,
-        media_type: post.media_type,
-        caption: post.caption,
-        likes_count: post.likes_count,
-        comments_count: post.comments_count,
-        shares_count: post.shares_count,
-        created_at: post.created_at,
-        user_id: post.user_id,
-        user_liked: likedPostIds.has(post.id),
-        user_saved: savedPostIds.has(post.id),
-        profile: {
-          display_name: post.profiles.display_name,
-          username: post.profiles.username,
-          avatar_url: post.profiles.avatar_url
+      // Map to Post interface with URL validation
+      const postsWithDetails = (fetchedPosts || []).map((post: any) => {
+        // Validate media_url format
+        if (post.media_type === 'video' && !post.media_url?.includes('supabase')) {
+          console.warn('[VerticalFeed] Suspicious video URL detected:', {
+            postId: post.id,
+            mediaUrl: post.media_url,
+            expectedFormat: 'Should contain supabase storage URL'
+          });
         }
-      }));
+        
+        return {
+          id: post.id,
+          media_url: post.media_url,
+          media_type: post.media_type,
+          caption: post.caption,
+          likes_count: post.likes_count,
+          comments_count: post.comments_count,
+          shares_count: post.shares_count,
+          created_at: post.created_at,
+          user_id: post.user_id,
+          user_liked: likedPostIds.has(post.id),
+          user_saved: savedPostIds.has(post.id),
+          profile: {
+            display_name: post.profiles.display_name,
+            username: post.profiles.username,
+            avatar_url: post.profiles.avatar_url
+          }
+        };
+      });
 
       // Smart video prefetching based on network quality
       const connection = (navigator as any).connection;

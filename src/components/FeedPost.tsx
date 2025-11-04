@@ -81,7 +81,7 @@ export const FeedPost = ({
   } | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
   
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 1; // Reduced for faster error detection
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
@@ -96,6 +96,8 @@ export const FeedPost = ({
       code: error?.code,
       message: error?.message,
       mediaUrl,
+      expectedUrl: mediaUrl,
+      actualSrc: video.src,
       postId: id,
       retryAttempt: retryCount + 1,
     };
@@ -103,6 +105,8 @@ export const FeedPost = ({
     console.error('[FeedPost] Video loading error:', errorDetails);
     console.error('[FeedPost] Video error object:', error);
     console.error('[FeedPost] Video source:', video.src);
+    console.error('[FeedPost] Expected URL:', mediaUrl);
+    console.error('[FeedPost] URL mismatch:', video.src !== mediaUrl);
     console.error('[FeedPost] Video ready state:', video.readyState);
     console.error('[FeedPost] Video network state:', video.networkState);
 
@@ -147,9 +151,9 @@ export const FeedPost = ({
       }
     }
 
-    // Retry logic with exponential backoff
+    // Retry logic with quick retry
     if (retryCount < MAX_RETRIES && isOnline) {
-      const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+      const delay = 1000; // Quick 1 second retry
       console.log(`[FeedPost] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
       setRetryCount(prev => prev + 1);
       
@@ -160,12 +164,22 @@ export const FeedPost = ({
         }
       }, delay);
     } else {
-      console.error('[FeedPost] Max retries reached or offline, showing error state');
+      console.error('[FeedPost] Max retries reached or offline, showing error state with auto-retry');
       setMediaError({
         type: errorType,
         message: errorMessage,
         isNetworkError,
       });
+      
+      // Auto-dismiss error and retry after 2 seconds
+      setTimeout(() => {
+        console.log('[FeedPost] Auto-dismissing error and retrying...');
+        setMediaError(null);
+        setRetryCount(0);
+        if (videoRef.current) {
+          videoRef.current.load();
+        }
+      }, 2000);
     }
   };
 
