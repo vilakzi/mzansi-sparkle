@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -73,9 +73,50 @@ export const FeedPost = ({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const hasInitializedRef = useRef(false);
   const preloadedRef = useRef(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [mediaError, setMediaError] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  
+  const MAX_RETRIES = 3;
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
+
+  // Media error handling with exponential backoff retry
+  const handleMediaError = () => {
+    if (retryCount < MAX_RETRIES) {
+      const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+      setRetryCount(prev => prev + 1);
+      
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.load();
+        }
+      }, delay);
+    } else {
+      setMediaError(true);
+    }
+  };
+
+  // Handle buffering and loading states
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || mediaType !== 'video') return;
+
+    const handleWaiting = () => setIsBuffering(true);
+    const handleCanPlay = () => setIsBuffering(false);
+    const handleError = () => handleMediaError();
+
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('error', handleError);
+
+    return () => {
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('error', handleError);
+    };
+  }, [mediaType, retryCount]);
 
   // Aggressive preload for smooth scrolling
   useEffect(() => {
@@ -330,73 +371,100 @@ export const FeedPost = ({
     <div className="relative h-screen w-full snap-start snap-always will-change-transform touch-none">
       {mediaType === "video" ? (
         <div className="relative h-full w-full">
-          <div className="absolute inset-0 pointer-events-none touch-auto" onClick={handleVideoClick}>
-            <div className="w-full h-full pointer-events-auto" />
-          </div>
-          <video
-            ref={videoRef}
-            src={mediaUrl}
-            className="h-full w-full object-cover pointer-events-none will-change-transform"
-            loop
-            playsInline
-            muted={isMuted}
-            preload="auto"
-          />
-
-          {/* Play/Pause indicator */}
-          {!isPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="bg-black/50 rounded-full p-4">
-                <Play className="h-16 w-16 text-white" fill="white" />
-              </div>
-            </div>
-          )}
-
-          {/* Double tap heart animation */}
-          {showHeart && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <Heart 
-                className="h-32 w-32 text-red-500 animate-ping" 
-                fill="red"
-              />
-            </div>
-          )}
-
-          {/* Volume control */}
-          <button
-            onClick={toggleMute}
-            className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
-          >
-            {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
-          </button>
-
-          {/* More options menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          {mediaError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-6">
+              <p className="text-sm mb-4">Unable to load video</p>
               <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setMediaError(false);
+                  setRetryCount(0);
+                  if (videoRef.current) videoRef.current.load();
+                }}
               >
-                <MoreVertical className="h-6 w-6" />
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="z-[100] bg-background">
-              {currentUserId === userId && onDelete && (
-                <DropdownMenuItem 
-                  onClick={onDelete}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Post
-                </DropdownMenuItem>
+            </div>
+          ) : (
+            <>
+              <div className="absolute inset-0 pointer-events-none touch-auto" onClick={handleVideoClick}>
+                <div className="w-full h-full pointer-events-auto" />
+              </div>
+              <video
+                ref={videoRef}
+                src={mediaUrl}
+                className="h-full w-full object-cover pointer-events-none will-change-transform"
+                loop
+                playsInline
+                muted={isMuted}
+                preload="auto"
+              />
+
+              {/* Buffering indicator */}
+              {isBuffering && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                  <RefreshCw className="h-10 w-10 text-white animate-spin" />
+                </div>
               )}
-              <DropdownMenuItem onClick={() => setShowReport(true)}>
-                <Flag className="h-4 w-4 mr-2" />
-                Report Post
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+
+              {/* Play/Pause indicator */}
+              {!isPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-black/50 rounded-full p-4">
+                    <Play className="h-16 w-16 text-white" fill="white" />
+                  </div>
+                </div>
+              )}
+
+              {/* Double tap heart animation */}
+              {showHeart && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <Heart 
+                    className="h-32 w-32 text-red-500 animate-ping" 
+                    fill="red"
+                  />
+                </div>
+              )}
+
+              {/* Volume control */}
+              <button
+                onClick={toggleMute}
+                className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
+              >
+                {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
+              </button>
+
+              {/* More options menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
+                  >
+                    <MoreVertical className="h-6 w-6" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="z-[100] bg-background">
+                  {currentUserId === userId && onDelete && (
+                    <DropdownMenuItem 
+                      onClick={onDelete}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Post
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => setShowReport(true)}>
+                    <Flag className="h-4 w-4 mr-2" />
+                    Report Post
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
         </div>
       ) : (
         <img

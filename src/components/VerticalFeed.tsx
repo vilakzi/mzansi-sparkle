@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
+import { PostErrorBoundary } from "./PostErrorBoundary";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
@@ -37,10 +38,16 @@ export const VerticalFeed = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [newPostsCount, setNewPostsCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [windowStart, setWindowStart] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Production-grade settings for memory and performance
+  const WINDOW_SIZE = 5; // Keep only 5 posts in DOM
+  const PRELOAD_COUNT = 2; // Preload 2 videos ahead
+  const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -100,27 +107,36 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
-  // Preload next 3 videos for instant playback
+  // Smart preloading with windowing for memory efficiency
   useEffect(() => {
-    if (currentIndex >= 0 && posts.length > 0) {
-      const nextVideos = posts
-        .slice(currentIndex + 1, currentIndex + 4)
-        .filter(p => p.media_type === 'video');
-      
-      // Remove old prefetch links
-      document.querySelectorAll('link[data-prefetch-video]').forEach(link => link.remove());
-      
-      // Add new prefetch links
-      nextVideos.forEach(post => {
-        const link = document.createElement('link');
-        link.rel = 'prefetch';
-        link.as = 'video';
-        link.href = post.media_url;
-        link.setAttribute('data-prefetch-video', 'true');
-        document.head.appendChild(link);
-      });
+    if (!containerRef.current || posts.length === 0) return;
+
+    // Preload current + PRELOAD_COUNT ahead
+    for (let i = currentIndex; i <= Math.min(currentIndex + PRELOAD_COUNT, posts.length - 1); i++) {
+      const postElement = containerRef.current.querySelector(`[data-post-index="${i}"]`);
+      if (postElement) {
+        const video = postElement.querySelector('video');
+        if (video && video.readyState < 2) {
+          video.load();
+        }
+      }
     }
-  }, [currentIndex, posts]);
+
+    // Aggressive memory cleanup - unload videos far from current
+    posts.forEach((_, index) => {
+      if (Math.abs(index - currentIndex) > WINDOW_SIZE) {
+        const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
+        if (postElement) {
+          const video = postElement.querySelector('video');
+          if (video) {
+            video.pause();
+            video.src = '';
+            video.load();
+          }
+        }
+      }
+    });
+  }, [currentIndex, posts, WINDOW_SIZE, PRELOAD_COUNT]);
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
@@ -311,14 +327,18 @@ export const VerticalFeed = () => {
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
         
+        // Update window for virtualization
+        const newWindowStart = Math.max(0, index - Math.floor(WINDOW_SIZE / 2));
+        setWindowStart(newWindowStart);
+        
         if (posts[index]) {
           trackView(posts[index].id);
         }
       }
 
-      // Preemptive loading when 10 posts remaining
+      // Smart load trigger
       const postsRemaining = posts.length - index;
-      if (postsRemaining <= 10 && !loadingMore && hasMore) {
+      if (postsRemaining <= LOAD_TRIGGER && !loadingMore && hasMore) {
         loadMore();
       }
     }, 100);
@@ -586,25 +606,28 @@ export const VerticalFeed = () => {
                 <div
                   key={`${post.id}-${index}`}
                   ref={index === posts.length - 8 ? lastPostRef : null}
+                  data-post-index={index}
                   className="snap-start snap-always will-change-transform"
                 >
-                  <FeedPost
-                    id={post.id}
-                    mediaUrl={post.media_url}
-                    mediaType={post.media_type}
-                    caption={post.caption}
-                    likesCount={post.likes_count}
-                    commentsCount={post.comments_count}
-                    sharesCount={post.shares_count}
-                    isSaved={post.user_saved || false}
-                    isLiked={post.user_liked || false}
-                    isActive={index === currentIndex}
-                    onLike={() => handleLike(post.id)}
-                    onSaveToggle={() => handleSaveToggle(post.id)}
-                    onDelete={() => handleDeletePost(post.id)}
-                    userId={post.user_id}
-                    profile={post.profile}
-                  />
+                  <PostErrorBoundary postId={post.id}>
+                    <FeedPost
+                      id={post.id}
+                      mediaUrl={post.media_url}
+                      mediaType={post.media_type}
+                      caption={post.caption}
+                      likesCount={post.likes_count}
+                      commentsCount={post.comments_count}
+                      sharesCount={post.shares_count}
+                      isSaved={post.user_saved || false}
+                      isLiked={post.user_liked || false}
+                      isActive={index === currentIndex}
+                      onLike={() => handleLike(post.id)}
+                      onSaveToggle={() => handleSaveToggle(post.id)}
+                      onDelete={() => handleDeletePost(post.id)}
+                      userId={post.user_id}
+                      profile={post.profile}
+                    />
+                  </PostErrorBoundary>
                 </div>
               ))}
               {loadingMore && (
