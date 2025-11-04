@@ -74,7 +74,11 @@ export const FeedPost = ({
   const hasInitializedRef = useRef(false);
   const preloadedRef = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [mediaError, setMediaError] = useState(false);
+  const [mediaError, setMediaError] = useState<{
+    type: string;
+    message: string;
+    isNetworkError: boolean;
+  } | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
   
   const MAX_RETRIES = 3;
@@ -82,19 +86,113 @@ export const FeedPost = ({
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Media error handling with exponential backoff retry
-  const handleMediaError = () => {
-    if (retryCount < MAX_RETRIES) {
+  // Check network connectivity
+  const checkNetworkConnectivity = async (): Promise<boolean> => {
+    try {
+      // Check browser online status first
+      if (!navigator.onLine) {
+        console.error('[FeedPost] Network offline - navigator.onLine is false');
+        return false;
+      }
+
+      // Try to fetch a small resource to verify actual connectivity
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
+      const response = await fetch(import.meta.env.VITE_SUPABASE_URL + '/rest/v1/', {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      console.log('[FeedPost] Network connectivity check:', response.ok ? 'OK' : 'FAILED');
+      return response.ok;
+    } catch (error) {
+      console.error('[FeedPost] Network connectivity check failed:', error);
+      return false;
+    }
+  };
+
+  // Enhanced media error handling with detailed logging
+  const handleMediaError = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const error = video.error;
+    const errorDetails = {
+      code: error?.code,
+      message: error?.message,
+      mediaUrl,
+      postId: id,
+      retryAttempt: retryCount + 1,
+    };
+
+    console.error('[FeedPost] Video loading error:', errorDetails);
+    console.error('[FeedPost] Video error object:', error);
+    console.error('[FeedPost] Video source:', video.src);
+    console.error('[FeedPost] Video ready state:', video.readyState);
+    console.error('[FeedPost] Video network state:', video.networkState);
+
+    // Check network connectivity
+    const isOnline = await checkNetworkConnectivity();
+
+    let errorType = 'Unknown Error';
+    let errorMessage = 'Unable to load video. Please try again.';
+    let isNetworkError = false;
+
+    // Categorize error based on error code
+    if (!isOnline) {
+      errorType = 'Network Error';
+      errorMessage = 'No internet connection. Please check your network and try again.';
+      isNetworkError = true;
+      console.error('[FeedPost] Network is offline');
+    } else if (error) {
+      switch (error.code) {
+        case MediaError.MEDIA_ERR_ABORTED:
+          errorType = 'Playback Aborted';
+          errorMessage = 'Video playback was aborted. Please try again.';
+          console.error('[FeedPost] Media error: Playback aborted by user');
+          break;
+        case MediaError.MEDIA_ERR_NETWORK:
+          errorType = 'Network Error';
+          errorMessage = 'Network error while loading video. Please check your connection.';
+          isNetworkError = true;
+          console.error('[FeedPost] Media error: Network error during download');
+          break;
+        case MediaError.MEDIA_ERR_DECODE:
+          errorType = 'Decode Error';
+          errorMessage = 'Video format not supported or file is corrupted.';
+          console.error('[FeedPost] Media error: Decode error (corrupted or unsupported format)');
+          break;
+        case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+          errorType = 'Source Not Supported';
+          errorMessage = 'Video source not found or format not supported.';
+          console.error('[FeedPost] Media error: Source not supported or not found (404/CORS)');
+          break;
+        default:
+          console.error('[FeedPost] Media error: Unknown error code', error.code);
+      }
+    }
+
+    // Retry logic with exponential backoff
+    if (retryCount < MAX_RETRIES && isOnline) {
       const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+      console.log(`[FeedPost] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
       setRetryCount(prev => prev + 1);
       
       setTimeout(() => {
+        console.log('[FeedPost] Attempting to reload video...');
         if (videoRef.current) {
           videoRef.current.load();
         }
       }, delay);
     } else {
-      setMediaError(true);
+      console.error('[FeedPost] Max retries reached or offline, showing error state');
+      setMediaError({
+        type: errorType,
+        message: errorMessage,
+        isNetworkError,
+      });
     }
   };
 
@@ -372,13 +470,22 @@ export const FeedPost = ({
       {mediaType === "video" ? (
         <div className="relative h-full w-full">
           {mediaError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-6">
-              <p className="text-sm mb-4">Unable to load video</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-6 space-y-4">
+              <div className="text-center space-y-2">
+                <p className="text-lg font-semibold text-red-400">{mediaError.type}</p>
+                <p className="text-sm text-gray-300">{mediaError.message}</p>
+                {mediaError.isNetworkError && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Check your internet connection and try again
+                  </p>
+                )}
+              </div>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  setMediaError(false);
+                  console.log('[FeedPost] Manual retry initiated by user');
+                  setMediaError(null);
                   setRetryCount(0);
                   if (videoRef.current) videoRef.current.load();
                 }}
