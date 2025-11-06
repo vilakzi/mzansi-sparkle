@@ -44,10 +44,20 @@ export const VerticalFeed = () => {
   const touchStartYRef = useRef<number>(0);
   const isAtTopRef = useRef<boolean>(false);
   
-  // Mobile-optimized settings
-  const WINDOW_SIZE = 5; // Keep 5 posts loaded (increased for better mobile scrolling)
+  // Virtual scrolling settings - CRITICAL for memory management
+  const WINDOW_SIZE = 10; // Render 10 posts in window (5 above + current + 4 below)
   const PRELOAD_COUNT = 2; // Preload 2 videos ahead
   const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
+  
+  // Calculate visible window of posts for virtual scrolling
+  const visibleStart = Math.max(0, windowStart);
+  const visibleEnd = Math.min(posts.length, windowStart + WINDOW_SIZE);
+  const visiblePosts = posts.slice(visibleStart, visibleEnd);
+  
+  // Virtual scrolling: calculate spacer heights to maintain scroll position
+  const postHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const topSpacerHeight = visibleStart * postHeight;
+  const bottomSpacerHeight = Math.max(0, (posts.length - visibleEnd) * postHeight);
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -397,9 +407,11 @@ export const VerticalFeed = () => {
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
         
-        // Update window for virtualization
+        // Update window for virtualization - keep current post centered
         const newWindowStart = Math.max(0, index - Math.floor(WINDOW_SIZE / 2));
-        setWindowStart(newWindowStart);
+        if (newWindowStart !== windowStart) {
+          setWindowStart(newWindowStart);
+        }
         
         if (posts[index]) {
           trackView(posts[index].id);
@@ -663,34 +675,56 @@ export const VerticalFeed = () => {
             </div>
           ) : (
             <>
-              {posts.map((post, index) => (
-                <div
-                  key={`${post.id}-${index}`}
-                  ref={index === posts.length - 8 ? lastPostRef : null}
-                  data-post-index={index}
-                  className="snap-start snap-always will-change-transform"
-                >
-                  <PostErrorBoundary postId={post.id}>
-                    <FeedPost
-                      id={post.id}
-                      mediaUrl={post.media_url}
-                      mediaType={post.media_type}
-                      caption={post.caption}
-                      likesCount={post.likes_count}
-                      commentsCount={post.comments_count}
-                      sharesCount={post.shares_count}
-                      isSaved={post.user_saved || false}
-                      isLiked={post.user_liked || false}
-                      isActive={index === currentIndex}
-                      onLike={() => handleLike(post.id)}
-                      onSaveToggle={() => handleSaveToggle(post.id)}
-                      onDelete={() => handleDeletePost(post.id)}
-                      userId={post.user_id}
-                      profile={post.profile}
-                    />
-                  </PostErrorBoundary>
-                </div>
-              ))}
+              {/* Top spacer for virtual scrolling */}
+              {topSpacerHeight > 0 && (
+                <div 
+                  style={{ height: `${topSpacerHeight}px` }}
+                  className="pointer-events-none"
+                  aria-hidden="true"
+                />
+              )}
+              
+              {/* Render only visible posts in window */}
+              {visiblePosts.map((post, visibleIndex) => {
+                const actualIndex = visibleStart + visibleIndex;
+                return (
+                  <div
+                    key={`${post.id}-${actualIndex}`}
+                    ref={actualIndex === posts.length - 8 ? lastPostRef : null}
+                    data-post-index={actualIndex}
+                    className="snap-start snap-always will-change-transform"
+                  >
+                    <PostErrorBoundary postId={post.id}>
+                      <FeedPost
+                        id={post.id}
+                        mediaUrl={post.media_url}
+                        mediaType={post.media_type}
+                        caption={post.caption}
+                        likesCount={post.likes_count}
+                        commentsCount={post.comments_count}
+                        sharesCount={post.shares_count}
+                        isSaved={post.user_saved || false}
+                        isLiked={post.user_liked || false}
+                        isActive={actualIndex === currentIndex}
+                        onLike={() => handleLike(post.id)}
+                        onSaveToggle={() => handleSaveToggle(post.id)}
+                        onDelete={() => handleDeletePost(post.id)}
+                        userId={post.user_id}
+                        profile={post.profile}
+                      />
+                    </PostErrorBoundary>
+                  </div>
+                );
+              })}
+              
+              {/* Bottom spacer for virtual scrolling */}
+              {bottomSpacerHeight > 0 && (
+                <div 
+                  style={{ height: `${bottomSpacerHeight}px` }}
+                  className="pointer-events-none"
+                  aria-hidden="true"
+                />
+              )}
               {loadingMore && (
                 <div className="flex h-screen items-center justify-center snap-start">
                   <div className="text-center space-y-4 animate-fade-in">
