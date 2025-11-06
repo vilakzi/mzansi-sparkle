@@ -36,10 +36,13 @@ export const VerticalFeed = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [windowStart, setWindowStart] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartYRef = useRef<number>(0);
+  const isAtTopRef = useRef<boolean>(false);
   
   // Mobile-optimized settings
   const WINDOW_SIZE = 5; // Keep 5 posts loaded (increased for better mobile scrolling)
@@ -287,6 +290,56 @@ export const VerticalFeed = () => {
     }
   };
 
+  // Pull-to-refresh handlers - only activates at top
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!containerRef.current) return;
+    
+    const isAtTop = containerRef.current.scrollTop <= 1;
+    isAtTopRef.current = isAtTop;
+    
+    if (isAtTop) {
+      touchStartYRef.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!containerRef.current || !isAtTopRef.current) return;
+    
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartYRef.current;
+    
+    // Only track downward pulls when at top
+    if (diff > 0 && containerRef.current.scrollTop <= 1) {
+      // Apply resistance for natural feel
+      const resistance = 0.4;
+      const maxPull = 120;
+      const distance = Math.min(diff * resistance, maxPull);
+      
+      setPullDistance(distance);
+      
+      // Only prevent default if we're actually pulling (not just touching)
+      if (distance > 10) {
+        e.preventDefault();
+      }
+    } else {
+      setPullDistance(0);
+      isAtTopRef.current = false;
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    const threshold = 60;
+    
+    if (pullDistance >= threshold && !isRefreshing) {
+      await handleRefresh();
+    }
+    
+    // Reset
+    setPullDistance(0);
+    touchStartYRef.current = 0;
+    isAtTopRef.current = false;
+  };
+
 
   const setupRealtimeSubscription = () => {
     const channel = supabase
@@ -529,6 +582,28 @@ export const VerticalFeed = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Pull-to-refresh indicator */}
+      {pullDistance > 0 && (
+        <div 
+          className="absolute top-0 left-0 right-0 z-50 flex justify-center items-center pointer-events-none"
+          style={{
+            height: `${Math.min(pullDistance * 1.2, 80)}px`,
+            opacity: Math.min(pullDistance / 60, 1),
+          }}
+        >
+          <div className="bg-background/95 backdrop-blur-sm rounded-full p-3 shadow-lg">
+            <RefreshCw 
+              className={`h-5 w-5 text-primary transition-transform duration-200 ${
+                pullDistance >= 60 ? 'animate-spin' : ''
+              }`}
+              style={{
+                transform: `rotate(${pullDistance * 3}deg)`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Simple Refresh Button */}
       <div className="absolute top-4 right-4 z-10">
         <Button
@@ -547,12 +622,17 @@ export const VerticalFeed = () => {
         <div
           ref={containerRef}
           onScroll={handleScroll}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain touch-pan-y"
           style={{ 
             scrollbarWidth: 'none', 
             msOverflowStyle: 'none',
             WebkitOverflowScrolling: 'touch',
-            willChange: 'scroll-position'
+            willChange: 'scroll-position',
+            transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.5, 40)}px)` : 'none',
+            transition: pullDistance === 0 ? 'transform 0.3s ease-out' : 'none',
           }}
         >
           {posts.length === 0 && !loading ? (
