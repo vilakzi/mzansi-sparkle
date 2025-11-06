@@ -501,10 +501,12 @@ export const FeedPost = ({
                 preload="auto"
               />
 
-              {/* Buffering indicator */}
+              {/* Buffering indicator - subtle overlay */}
               {isBuffering && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-                  <RefreshCw className="h-10 w-10 text-white animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-none">
+                  <div className="bg-black/60 rounded-full p-3 shadow-lg">
+                    <RefreshCw className="h-6 w-6 text-white animate-spin" />
+                  </div>
                 </div>
               )}
 
