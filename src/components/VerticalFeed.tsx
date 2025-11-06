@@ -99,12 +99,15 @@ export const VerticalFeed = () => {
     }
   }, [posts.length]);
 
-  // Smart preloading with windowing for memory efficiency
+  // Optimized video preloading and auto-pause for bandwidth efficiency
   useEffect(() => {
     if (!containerRef.current || posts.length === 0) return;
 
-    // Preload current + PRELOAD_COUNT ahead
-    for (let i = currentIndex; i <= Math.min(currentIndex + PRELOAD_COUNT, posts.length - 1); i++) {
+    const preloadRange = PRELOAD_COUNT; // Videos ahead to preload
+    const pauseThreshold = WINDOW_SIZE; // Distance at which to pause videos
+
+    // Preload upcoming videos (current + PRELOAD_COUNT ahead)
+    for (let i = currentIndex; i <= Math.min(currentIndex + preloadRange, posts.length - 1); i++) {
       const postElement = containerRef.current.querySelector(`[data-post-index="${i}"]`);
       if (postElement) {
         const video = postElement.querySelector('video');
@@ -114,17 +117,28 @@ export const VerticalFeed = () => {
       }
     }
 
-    // Gentle memory cleanup - just pause videos far from current (don't clear src on mobile)
-    posts.forEach((_, index) => {
-      if (Math.abs(index - currentIndex) > WINDOW_SIZE) {
-        const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
-        if (postElement) {
-          const video = postElement.querySelector('video');
-          if (video && !video.paused) {
-            video.pause();
-            // Don't clear src - it breaks mobile scrolling!
-          }
-        }
+    // Auto-pause off-screen videos to save bandwidth and battery
+    posts.forEach((post, index) => {
+      if (post.media_type !== 'video') return;
+      
+      const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
+      if (!postElement) return;
+      
+      const video = postElement.querySelector('video');
+      if (!video) return;
+
+      const distanceFromCurrent = Math.abs(index - currentIndex);
+      
+      // Pause videos that are far from current view
+      if (distanceFromCurrent > pauseThreshold && !video.paused) {
+        video.pause();
+        console.log(`[VerticalFeed] Auto-paused video ${index} (distance: ${distanceFromCurrent})`);
+      }
+      
+      // Only the active video should be playing (FeedPost handles this via isActive prop)
+      // But ensure non-active videos are definitely paused
+      if (index !== currentIndex && !video.paused) {
+        video.pause();
       }
     });
   }, [currentIndex, posts, WINDOW_SIZE, PRELOAD_COUNT]);
