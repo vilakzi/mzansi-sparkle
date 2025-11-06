@@ -36,10 +36,14 @@ export const VerticalFeed = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [windowStart, setWindowStart] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartRef = useRef<number>(0);
+  const pullThreshold = 80; // Distance in pixels to trigger refresh
   
   // Mobile-optimized settings
   const WINDOW_SIZE = 5; // Keep 5 posts loaded (increased for better mobile scrolling)
@@ -287,6 +291,49 @@ export const VerticalFeed = () => {
     }
   };
 
+  // Pull-to-refresh handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (containerRef.current && containerRef.current.scrollTop === 0) {
+      touchStartRef.current = e.touches[0].clientY;
+      setIsPulling(true);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPulling || !containerRef.current) return;
+    
+    const currentTouch = e.touches[0].clientY;
+    const diff = currentTouch - touchStartRef.current;
+    
+    // Only track downward pulls when at top of scroll
+    if (diff > 0 && containerRef.current.scrollTop === 0) {
+      // Apply resistance - makes the pull feel more natural
+      const resistance = 0.5;
+      const distance = Math.min(diff * resistance, pullThreshold * 1.5);
+      setPullDistance(distance);
+      
+      // Prevent default scroll when pulling
+      if (distance > 10) {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!isPulling) return;
+    
+    setIsPulling(false);
+    
+    if (pullDistance >= pullThreshold) {
+      // Trigger refresh
+      await handleRefresh();
+    }
+    
+    // Reset with animation
+    setPullDistance(0);
+    touchStartRef.current = 0;
+  };
+
   const setupRealtimeSubscription = () => {
     const channel = supabase
       .channel("posts-changes")
@@ -527,7 +574,27 @@ export const VerticalFeed = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-background relative">
+      {/* Pull-to-refresh indicator */}
+      <div 
+        className="absolute top-0 left-0 right-0 z-50 flex justify-center pointer-events-none transition-opacity duration-200"
+        style={{
+          transform: `translateY(${Math.min(pullDistance - 60, 20)}px)`,
+          opacity: pullDistance > 0 ? 1 : 0,
+        }}
+      >
+        <div className="bg-background/95 backdrop-blur-sm rounded-full p-3 shadow-lg animate-fade-in">
+          <RefreshCw 
+            className={`h-6 w-6 text-primary transition-all duration-300 ${
+              pullDistance >= pullThreshold ? 'scale-110' : ''
+            }`}
+            style={{
+              transform: `rotate(${Math.min(pullDistance * 2, 180)}deg)`,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Simple Refresh Button */}
       <div className="absolute top-4 right-4 z-10">
         <Button
@@ -546,12 +613,17 @@ export const VerticalFeed = () => {
         <div
           ref={containerRef}
           onScroll={handleScroll}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           className="h-full overflow-y-scroll snap-y snap-proximity overscroll-y-contain touch-pan-y"
           style={{ 
             scrollbarWidth: 'none', 
             msOverflowStyle: 'none',
             WebkitOverflowScrolling: 'touch',
-            willChange: 'scroll-position'
+            willChange: 'scroll-position',
+            paddingTop: pullDistance > 0 ? `${pullDistance}px` : '0',
+            transition: isPulling ? 'none' : 'padding-top 0.3s ease-out',
           }}
         >
           {posts.length === 0 && !loading ? (
