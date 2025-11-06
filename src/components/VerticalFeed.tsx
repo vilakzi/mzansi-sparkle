@@ -41,8 +41,8 @@ export const VerticalFeed = () => {
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Production-grade settings for memory and performance
-  const WINDOW_SIZE = 3; // Keep only 3 posts in DOM (reduced for mobile)
+  // Mobile-optimized settings
+  const WINDOW_SIZE = 5; // Keep 5 posts loaded (increased for better mobile scrolling)
   const PRELOAD_COUNT = 2; // Preload 2 videos ahead
   const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
 
@@ -111,16 +111,15 @@ export const VerticalFeed = () => {
       }
     }
 
-    // Aggressive memory cleanup - unload videos far from current
+    // Gentle memory cleanup - just pause videos far from current (don't clear src on mobile)
     posts.forEach((_, index) => {
       if (Math.abs(index - currentIndex) > WINDOW_SIZE) {
         const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
         if (postElement) {
           const video = postElement.querySelector('video');
-          if (video) {
+          if (video && !video.paused) {
             video.pause();
-            video.src = '';
-            video.load();
+            // Don't clear src - it breaks mobile scrolling!
           }
         }
       }
@@ -323,8 +322,9 @@ export const VerticalFeed = () => {
       const scrollTop = containerRef.current.scrollTop;
       const containerHeight = containerRef.current.clientHeight;
       
-      const centerPoint = scrollTop + (containerHeight / 2);
-      const index = Math.floor(centerPoint / window.innerHeight);
+      // Better mobile scroll detection - use scroll position with threshold
+      const postHeight = window.innerHeight;
+      const index = Math.round(scrollTop / postHeight);
       
       if (index !== currentIndex && index >= 0 && index < posts.length) {
         setCurrentIndex(index);
@@ -546,7 +546,7 @@ export const VerticalFeed = () => {
         <div
           ref={containerRef}
           onScroll={handleScroll}
-          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain touch-pan-y"
+          className="h-full overflow-y-scroll snap-y snap-proximity overscroll-y-contain touch-pan-y"
           style={{ 
             scrollbarWidth: 'none', 
             msOverflowStyle: 'none',
