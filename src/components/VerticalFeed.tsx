@@ -402,11 +402,7 @@ export const VerticalFeed = () => {
       const distance = Math.min(diff * resistance, maxPull);
       
       setPullDistance(distance);
-      
-      // Only prevent default if we're actually pulling hard (threshold raised to 40px to not block scrolling)
-      if (distance > 40) {
-        e.preventDefault();
-      }
+      // Removed e.preventDefault() to allow normal mobile scrolling
     } else {
       setPullDistance(0);
       isAtTopRef.current = false;
