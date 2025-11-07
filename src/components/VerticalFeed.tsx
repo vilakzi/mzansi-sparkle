@@ -236,33 +236,51 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Simple direct query - specify the relationship explicitly
-      const { data: fetchedPosts, error } = await supabase
+      // Call hybrid feed algorithm (70% following, 20% trending, 10% discovery)
+      const { data: feedPosts, error: feedError } = await supabase
+        .rpc('get_hybrid_feed', {
+          p_user_id: session.user.id,
+          p_limit: BATCH_SIZE,
+          p_offset: offset
+        });
+
+      if (feedError) throw feedError;
+
+      // Fetch profile data for posts
+      const postIds = (feedPosts || []).map(p => p.id);
+      const { data: postsWithProfiles, error: profilesError } = await supabase
         .from('posts')
         .select(`
           id,
-          media_url,
-          media_type,
-          caption,
-          likes_count,
-          comments_count,
-          shares_count,
-          saves_count,
-          views_count,
-          created_at,
-          user_id,
           profiles!posts_user_id_fkey(username, display_name, avatar_url)
         `)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + BATCH_SIZE - 1);
+        .in('id', postIds);
 
-      if (error) throw error;
+      if (profilesError) throw profilesError;
+
+      // Create profile lookup map
+      const profileMap = new Map(
+        (postsWithProfiles || []).map(p => [p.id, p.profiles])
+      );
+
+      // Merge feed data with profile data
+      const fetchedPosts = (feedPosts || []).map(post => ({
+        ...post,
+        profiles: profileMap.get(post.id)
+      }));
+
+      console.log('[VerticalFeed] Hybrid feed loaded:', {
+        total: fetchedPosts.length,
+        following: fetchedPosts.filter(p => p.feed_type === 'following').length,
+        trending: fetchedPosts.filter(p => p.feed_type === 'trending').length,
+        discovery: fetchedPosts.filter(p => p.feed_type === 'discovery').length
+      });
 
       // Check if user liked/saved each post
-      const postIds = (fetchedPosts || []).map(p => p.id);
+      const enrichedPostIds = (fetchedPosts || []).map(p => p.id);
       const [likesData, savesData] = await Promise.all([
-        supabase.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', session.user.id),
-        supabase.from('saved_posts').select('post_id').in('post_id', postIds).eq('user_id', session.user.id)
+        supabase.from('post_likes').select('post_id').in('post_id', enrichedPostIds).eq('user_id', session.user.id),
+        supabase.from('saved_posts').select('post_id').in('post_id', enrichedPostIds).eq('user_id', session.user.id)
       ]);
 
       const likedPostIds = new Set(likesData.data?.map(l => l.post_id) || []);

@@ -870,6 +870,23 @@ export type Database = {
           views_count: number
         }[]
       }
+      get_hybrid_feed: {
+        Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+        Returns: {
+          caption: string
+          comments_count: number
+          created_at: string
+          feed_type: string
+          id: string
+          likes_count: number
+          media_type: string
+          media_url: string
+          saves_count: number
+          shares_count: number
+          user_id: string
+          views_count: number
+        }[]
+      }
       get_new_posts_since: {
         Args: {
           p_feed_type: string
