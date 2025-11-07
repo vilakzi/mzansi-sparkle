@@ -39,10 +39,12 @@ export const VerticalFeed = () => {
   const [pullDistance, setPullDistance] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const postDetectionObserverRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartYRef = useRef<number>(0);
   const isAtTopRef = useRef<boolean>(false);
+  const currentIndexRef = useRef<number>(0);
   
   // Virtual scrolling settings - CRITICAL for memory management
   const WINDOW_SIZE = 10; // Render 10 posts in window (5 above + current + 4 below)
@@ -100,14 +102,67 @@ export const VerticalFeed = () => {
     };
   }, [loadingMore, loading, posts.length]);
 
-  // Ensure first post is active on mount
+  // Keep currentIndexRef in sync with currentIndex
   useEffect(() => {
-    if (posts.length > 0 && currentIndex === 0) {
-      setTimeout(() => {
-        setCurrentIndex(0);
-      }, 100);
-    }
-  }, [posts.length]);
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  // IntersectionObserver for accurate post detection (works with variable heights)
+  useEffect(() => {
+    if (!containerRef.current || posts.length === 0) return;
+
+    const observerOptions = {
+      root: containerRef.current,
+      threshold: [0, 0.25, 0.5, 0.75, 1], // Multiple thresholds for smooth tracking
+      rootMargin: '0px'
+    };
+
+    postDetectionObserverRef.current = new IntersectionObserver((entries) => {
+      // Find the most visible post (highest intersection ratio)
+      let maxRatio = 0;
+      let mostVisibleIndex = currentIndexRef.current;
+
+      entries.forEach((entry) => {
+        if (entry.intersectionRatio > maxRatio) {
+          maxRatio = entry.intersectionRatio;
+          const indexAttr = entry.target.getAttribute('data-post-index');
+          if (indexAttr) {
+            mostVisibleIndex = parseInt(indexAttr, 10);
+          }
+        }
+      });
+
+      // Update only if we found a more visible post (>50% visible)
+      if (maxRatio >= 0.5 && mostVisibleIndex !== currentIndexRef.current) {
+        setCurrentIndex(mostVisibleIndex);
+        
+        // Update window for virtualization
+        const newWindowStart = Math.max(0, mostVisibleIndex - Math.floor(WINDOW_SIZE / 2));
+        setWindowStart(newWindowStart);
+        
+        // Track view
+        if (posts[mostVisibleIndex]) {
+          trackView(posts[mostVisibleIndex].id);
+        }
+        
+        console.log(`[VerticalFeed] Post ${mostVisibleIndex} is now active (${Math.round(maxRatio * 100)}% visible)`);
+      }
+    }, observerOptions);
+
+    // Observe all visible post elements in the virtual window
+    const postElements = containerRef.current.querySelectorAll('[data-post-index]');
+    postElements.forEach((el) => {
+      if (postDetectionObserverRef.current) {
+        postDetectionObserverRef.current.observe(el);
+      }
+    });
+
+    return () => {
+      if (postDetectionObserverRef.current) {
+        postDetectionObserverRef.current.disconnect();
+      }
+    };
+  }, [posts, visibleStart, visibleEnd, WINDOW_SIZE]);
 
   // Smart video preloading - only preload within 2 positions of current view
   useEffect(() => {
@@ -404,34 +459,14 @@ export const VerticalFeed = () => {
     scrollTimeoutRef.current = setTimeout(() => {
       if (!containerRef.current) return;
       
-      const scrollTop = containerRef.current.scrollTop;
-      const containerHeight = containerRef.current.clientHeight;
-      
-      // Better mobile scroll detection - use scroll position with threshold
-      const postHeight = window.innerHeight;
-      const index = Math.round(scrollTop / postHeight);
-      
-      if (index !== currentIndex && index >= 0 && index < posts.length) {
-        setCurrentIndex(index);
-        
-        // Update window for virtualization - keep current post centered
-        const newWindowStart = Math.max(0, index - Math.floor(WINDOW_SIZE / 2));
-        if (newWindowStart !== windowStart) {
-          setWindowStart(newWindowStart);
-        }
-        
-        if (posts[index]) {
-          trackView(posts[index].id);
-        }
-      }
-
-      // Smart load trigger
-      const postsRemaining = posts.length - index;
+      // IntersectionObserver now handles post detection
+      // This only handles load-more trigger
+      const postsRemaining = posts.length - currentIndexRef.current;
       if (postsRemaining <= LOAD_TRIGGER && !loadingMore && hasMore) {
         loadMore();
       }
-    }, 150); // Increased debounce for better mobile performance
-  }, [currentIndex, posts, loadingMore, hasMore]);
+    }, 150);
+  }, [posts.length, loadingMore, hasMore]);
 
   const markPostAsSeen = async (postId: string) => {
     if (!userId) return;
