@@ -403,8 +403,8 @@ export const VerticalFeed = () => {
       
       setPullDistance(distance);
       
-      // Only prevent default if we're actually pulling (not just touching)
-      if (distance > 10) {
+      // Only prevent default if we're actually pulling hard (threshold raised to 40px to not block scrolling)
+      if (distance > 40) {
         e.preventDefault();
       }
     } else {
