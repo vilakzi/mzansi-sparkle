@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -30,8 +30,6 @@ interface FeedPostProps {
   isActive: boolean;
   onLike: () => void;
   onSaveToggle: () => void;
-  onDelete?: () => void;
-  userId?: string;
   profile?: {
     display_name: string;
     username: string;
@@ -52,8 +50,6 @@ export const FeedPost = ({
   isActive,
   onLike,
   onSaveToggle,
-  onDelete,
-  userId,
   profile,
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -70,185 +66,21 @@ export const FeedPost = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const wasPlayingRef = useRef(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const hasInitializedRef = useRef(false);
-  const preloadedRef = useRef(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [mediaError, setMediaError] = useState<{
-    type: string;
-    message: string;
-    isNetworkError: boolean;
-  } | null>(null);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [hasAutoRetried, setHasAutoRetried] = useState(false);
-  
-  const MAX_RETRIES = 1; // Reduced for faster error detection
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Enhanced media error handling with detailed logging
-  const handleMediaError = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const error = video.error;
-    const errorDetails = {
-      code: error?.code,
-      message: error?.message,
-      mediaUrl,
-      expectedUrl: mediaUrl,
-      actualSrc: video.src,
-      postId: id,
-      retryAttempt: retryCount + 1,
-    };
-
-    console.error('[FeedPost] Video loading error:', errorDetails);
-    console.error('[FeedPost] Video error object:', error);
-    console.error('[FeedPost] Video source:', video.src);
-    console.error('[FeedPost] Expected URL:', mediaUrl);
-    console.error('[FeedPost] URL mismatch:', video.src !== mediaUrl);
-    console.error('[FeedPost] Video ready state:', video.readyState);
-    console.error('[FeedPost] Video network state:', video.networkState);
-
-    // Use simple navigator.onLine check
-    const isOnline = navigator.onLine;
-
-    let errorType = 'Unknown Error';
-    let errorMessage = 'Unable to load video. Please try again.';
-    let isNetworkError = false;
-
-    // Categorize error based on error code
-    if (!isOnline) {
-      errorType = 'Network Error';
-      errorMessage = 'No internet connection. Please check your network and try again.';
-      isNetworkError = true;
-      console.error('[FeedPost] Network is offline');
-    } else if (error) {
-      switch (error.code) {
-        case MediaError.MEDIA_ERR_ABORTED:
-          errorType = 'Playback Aborted';
-          errorMessage = 'Video playback was aborted. Please try again.';
-          console.error('[FeedPost] Media error: Playback aborted by user');
-          break;
-        case MediaError.MEDIA_ERR_NETWORK:
-          errorType = 'Network Error';
-          errorMessage = 'Network error while loading video. Please check your connection.';
-          isNetworkError = true;
-          console.error('[FeedPost] Media error: Network error during download');
-          break;
-        case MediaError.MEDIA_ERR_DECODE:
-          errorType = 'Decode Error';
-          errorMessage = 'Video format not supported or file is corrupted.';
-          console.error('[FeedPost] Media error: Decode error (corrupted or unsupported format)');
-          break;
-        case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-          errorType = 'Source Not Supported';
-          errorMessage = 'Video source not found or format not supported.';
-          console.error('[FeedPost] Media error: Source not supported or not found (404/CORS)');
-          break;
-        default:
-          console.error('[FeedPost] Media error: Unknown error code', error.code);
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isActive) {
+        videoRef.current.play();
+        setIsPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
       }
     }
-
-    // Retry logic with quick retry
-    if (retryCount < MAX_RETRIES && isOnline) {
-      const delay = 1000; // Quick 1 second retry
-      console.log(`[FeedPost] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-      setRetryCount(prev => prev + 1);
-      
-      setTimeout(() => {
-        console.log('[FeedPost] Attempting to reload video...');
-        if (videoRef.current) {
-          videoRef.current.load();
-        }
-      }, delay);
-    } else {
-      console.error('[FeedPost] Max retries reached or offline, showing error state');
-      setMediaError({
-        type: errorType,
-        message: errorMessage,
-        isNetworkError,
-      });
-      
-      // Auto-retry once after 2 seconds, then show persistent error
-      if (!hasAutoRetried && isOnline) {
-        setTimeout(() => {
-          console.log('[FeedPost] Auto-dismissing error and performing final retry...');
-          setHasAutoRetried(true);
-          setMediaError(null);
-          setRetryCount(0);
-          if (videoRef.current) {
-            videoRef.current.load();
-          }
-        }, 2000);
-      }
-    }
-  };
-
-  // Handle buffering and loading states
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || mediaType !== 'video') return;
-
-    const handleWaiting = () => setIsBuffering(true);
-    const handleCanPlay = () => setIsBuffering(false);
-    const handleError = () => handleMediaError();
-
-    video.addEventListener('waiting', handleWaiting);
-    video.addEventListener('canplay', handleCanPlay);
-    video.addEventListener('error', handleError);
-
-    return () => {
-      video.removeEventListener('waiting', handleWaiting);
-      video.removeEventListener('canplay', handleCanPlay);
-      video.removeEventListener('error', handleError);
-    };
-  }, [mediaType, retryCount]);
-
-  // Aggressive preload for smooth scrolling
-  useEffect(() => {
-    if (mediaType === 'video' && !preloadedRef.current && videoRef.current) {
-      videoRef.current.preload = 'auto';
-      videoRef.current.load(); // Force load immediately
-      preloadedRef.current = true;
-    }
-  }, [mediaType]);
-
-  useEffect(() => {
-    const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUserId(user?.id || null);
-    };
-    getCurrentUser();
-  }, []);
-
-  // Handle initial video play on mount
-  useEffect(() => {
-    if (videoRef.current && mediaType === "video" && isActive && !hasInitializedRef.current) {
-      videoRef.current.play().catch(() => {
-        // Ignore autoplay errors
-      });
-      setIsPlaying(true);
-      hasInitializedRef.current = true;
-    }
-  }, [mediaType, isActive]);
-
-  // Handle video play/pause when isActive changes
-  useEffect(() => {
-    if (!videoRef.current || mediaType !== "video") return;
-    
-    if (isActive) {
-      videoRef.current.play().catch(() => {
-        // Ignore autoplay errors  
-      });
-      setIsPlaying(true);
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  }, [isActive, mediaType]);
+  }, [isActive]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -457,127 +289,101 @@ export const FeedPost = ({
   };
 
   return (
-    <div className="relative h-screen w-full snap-start snap-always will-change-transform touch-none">
+    <div className="relative h-screen w-full snap-start snap-always">
       {mediaType === "video" ? (
         <div className="relative h-full w-full">
-          {mediaError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-6 space-y-4">
-              <div className="text-center space-y-2">
-                <p className="text-lg font-semibold text-red-400">{mediaError.type}</p>
-                <p className="text-sm text-gray-300">{mediaError.message}</p>
-                {mediaError.isNetworkError && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Check your internet connection and try again
-                  </p>
-                )}
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  console.log('[FeedPost] Manual retry initiated by user');
-                  setMediaError(null);
-                  setRetryCount(0);
-                  setHasAutoRetried(false); // Reset auto-retry flag for manual retry
-                  if (videoRef.current) videoRef.current.load();
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
+          <div className="absolute inset-0 pointer-events-none" onClick={handleVideoClick}>
+            <div className="w-full h-full pointer-events-auto" />
+          </div>
+          <video
+            ref={videoRef}
+            src={mediaUrl}
+            className="h-full w-full object-cover pointer-events-none"
+            loop
+            playsInline
+            muted={isMuted}
+          />
+          
+          {/* Interactive seekbar */}
+          <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
+            <div className="flex items-center gap-2 text-white text-xs mb-1">
+              <span>{formatTime(currentTime)}</span>
+              <span>/</span>
+              <span>{formatTime(duration)}</span>
             </div>
-          ) : (
-            <>
-              <div className="absolute inset-0 pointer-events-none touch-auto" onClick={handleVideoClick}>
-                <div className="w-full h-full pointer-events-auto" />
-              </div>
-              <video
-                ref={videoRef}
-                src={mediaUrl}
-                className="h-full w-full object-cover pointer-events-none will-change-transform"
-                loop
-                playsInline
-                muted={isMuted}
-                preload="auto"
+            <div 
+              className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
+              onMouseDown={handleSeekBarMouseDown}
+              onTouchStart={handleSeekBarTouch}
+              onTouchMove={handleSeekBarTouchMove}
+              onTouchEnd={handleSeekBarTouchEnd}
+            >
+              <div 
+                className="h-full bg-white rounded-full transition-all duration-100"
+                style={{ width: `${progress}%` }}
               />
+              <div 
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+              />
+            </div>
+          </div>
 
-              {/* Buffering indicator - subtle overlay */}
-              {isBuffering && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-none">
-                  <div className="bg-black/60 rounded-full p-3 shadow-lg">
-                    <RefreshCw className="h-6 w-6 text-white animate-spin" />
-                  </div>
-                </div>
-              )}
-
-              {/* Play/Pause indicator */}
-              {!isPlaying && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="bg-black/50 rounded-full p-4">
-                    <Play className="h-16 w-16 text-white" fill="white" />
-                  </div>
-                </div>
-              )}
-
-              {/* Double tap heart animation */}
-              {showHeart && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <Heart 
-                    className="h-32 w-32 text-red-500 animate-ping" 
-                    fill="red"
-                  />
-                </div>
-              )}
-
-              {/* Volume control */}
-              <button
-                onClick={toggleMute}
-                className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
-              >
-                {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
-              </button>
-
-              {/* More options menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
-                  >
-                    <MoreVertical className="h-6 w-6" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-[100] bg-background">
-                  {currentUserId === userId && onDelete && (
-                    <DropdownMenuItem 
-                      onClick={onDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Post
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => setShowReport(true)}>
-                    <Flag className="h-4 w-4 mr-2" />
-                    Report Post
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+          {/* Play/Pause indicator */}
+          {!isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/50 rounded-full p-4">
+                <Play className="h-16 w-16 text-white" fill="white" />
+              </div>
+            </div>
           )}
+
+          {/* Double tap heart animation */}
+          {showHeart && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <Heart 
+                className="h-32 w-32 text-red-500 animate-ping" 
+                fill="red"
+              />
+            </div>
+          )}
+
+          {/* Volume control */}
+          <button
+            onClick={toggleMute}
+            className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
+          >
+            {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
+          </button>
+
+          {/* More options menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
+              >
+                <MoreVertical className="h-6 w-6" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="z-[100]">
+              <DropdownMenuItem onClick={() => setShowReport(true)}>
+                <Flag className="h-4 w-4 mr-2" />
+                Report Post
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       ) : (
         <img
           src={mediaUrl}
           alt="Post"
           className="h-full w-full object-cover"
-          loading="lazy"
-          decoding="async"
         />
       )}
       
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none z-10">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none">
         {profile && (
           <div className="mb-4 pointer-events-auto">
             <Avatar 
@@ -640,35 +446,8 @@ export const FeedPost = ({
           </button>
         </div>
       </div>
-
-      {/* Interactive seekbar - positioned after gradient to ensure visibility */}
-      {mediaType === 'video' && (
-        <div className="absolute bottom-24 left-0 right-0 px-4 z-[70] pointer-events-auto">
-          <div className="flex items-center gap-2 text-white text-xs mb-1">
-            <span>{formatTime(currentTime)}</span>
-            <span>/</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-          <div 
-            className="relative h-1 bg-white/30 rounded-full cursor-pointer group py-3"
-            onMouseDown={handleSeekBarMouseDown}
-            onTouchStart={handleSeekBarTouch}
-            onTouchMove={handleSeekBarTouchMove}
-            onTouchEnd={handleSeekBarTouchEnd}
-          >
-            <div 
-              className="h-1 bg-white rounded-full transition-all duration-100"
-              style={{ width: `${progress}%` }}
-            />
-            <div 
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-              style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
-            />
-          </div>
-        </div>
-      )}
       
-      <CommentSheet
+      <CommentSheet 
         postId={id} 
         isOpen={showComments} 
         onClose={() => setShowComments(false)} 

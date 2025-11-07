@@ -1,12 +1,10 @@
-import { useState } from "react";
-import { Upload, X, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Upload, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Textarea } from "./ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { resizeImage } from "@/lib/imageProcessing";
-import { validateVideoFile, formatFileSize } from "@/lib/videoProcessing";
 
 type UploadButtonProps = {
   onClose?: () => void;
@@ -19,26 +17,13 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    // Validate video files
-    if (selectedFile.type.startsWith('video/')) {
-      const validation = await validateVideoFile(selectedFile);
-      if (!validation.isValid) {
-        toast.error(validation.error || 'Invalid video file');
-        return;
-      }
-
-      toast.success(
-        `Video validated: ${Math.floor(validation.duration || 0)}s, ${formatFileSize(selectedFile.size)}`
-      );
+    if (selectedFile) {
+      setFile(selectedFile);
+      const previewUrl = URL.createObjectURL(selectedFile);
+      setPreview(previewUrl);
     }
-
-    setFile(selectedFile);
-    const previewUrl = URL.createObjectURL(selectedFile);
-    setPreview(previewUrl);
   };
 
   const handleClose = () => {
@@ -64,22 +49,13 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
         return;
       }
 
-      const mediaType = file.type.startsWith("video") ? "video" : "image";
-      let uploadFile: File | Blob = file;
-      let fileExt = file.name.split(".").pop();
-
-      // Process images to ensure compatibility
-      if (mediaType === "image") {
-        const resizedBlob = await resizeImage(file, 1920, 1920, 0.85);
-        uploadFile = resizedBlob;
-        fileExt = "jpg";
-      }
-
+      const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const mediaType = file.type.startsWith("video") ? "video" : "image";
 
       const { error: uploadError } = await supabase.storage
         .from("posts-media")
-        .upload(fileName, uploadFile);
+        .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 

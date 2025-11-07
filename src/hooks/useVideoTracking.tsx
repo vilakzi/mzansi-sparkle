@@ -11,7 +11,6 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
   const sessionIdRef = useRef<string>(`${Date.now()}-${Math.random()}`);
   const startTimeRef = useRef<number>(0);
   const hasTrackedViewRef = useRef<boolean>(false);
-  const lastCheckTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isActive || !videoRef.current) return;
@@ -42,27 +41,21 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
     };
 
     const handleTimeUpdate = async () => {
-      // Debounce: only check once per second to prevent excessive DB writes
-      const now = Date.now();
-      if (now - lastCheckTimeRef.current < 1000) return;
-      lastCheckTimeRef.current = now;
-
-      // Already tracked, skip further checks
-      if (hasTrackedViewRef.current) return;
-
       if (video.currentTime > 0 && video.duration > 0) {
         const currentCompletionRate = video.currentTime / video.duration;
         
         // Track view when user watches at least 50% or 3 seconds (whichever comes first)
-        const watchedEnough = currentCompletionRate >= 0.5 || video.currentTime >= 3;
-        
-        if (watchedEnough) {
-          const currentWatchTime = startTimeRef.current 
-            ? watchDuration + (Date.now() - startTimeRef.current) / 1000
-            : watchDuration;
+        if (!hasTrackedViewRef.current) {
+          const watchedEnough = currentCompletionRate >= 0.5 || video.currentTime >= 3;
           
-          await trackView(sessionId, Math.floor(currentWatchTime), currentCompletionRate);
-          hasTrackedViewRef.current = true;
+          if (watchedEnough) {
+            const currentWatchTime = startTimeRef.current 
+              ? watchDuration + (Date.now() - startTimeRef.current) / 1000
+              : watchDuration;
+            
+            await trackView(sessionId, Math.floor(currentWatchTime), currentCompletionRate);
+            hasTrackedViewRef.current = true;
+          }
         }
       }
     };
@@ -71,18 +64,12 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
       try {
         const { data: { user } } = await supabase.auth.getUser();
 
-        // Only insert basic view tracking - post_views table doesn't have watch_duration/completion_rate
         await supabase.from("post_views").insert({
           post_id: postId,
           user_id: user?.id || null,
-        });
-        
-        console.log('[useVideoTracking] View tracked:', {
-          postId,
-          userId: user?.id,
-          sessionId,
-          watchDuration: duration,
-          completionRate: completionRate.toFixed(2),
+          session_id: sessionId,
+          watch_duration: duration,
+          completion_rate: completionRate,
         });
       } catch (error) {
         console.error("Error tracking video view:", error);
@@ -105,7 +92,7 @@ export const useVideoTracking = ({ postId, videoRef, isActive }: VideoTrackingPr
         handlePause();
       }
     };
-  }, [postId, isActive]);
+  }, [postId, isActive, videoRef]);
 
   return sessionIdRef.current;
 };

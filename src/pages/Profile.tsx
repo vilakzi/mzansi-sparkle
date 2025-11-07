@@ -5,29 +5,16 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical, Edit, Trash2, MessageCircle } from "lucide-react";
+import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { FeedPost } from "@/components/FeedPost";
 import { ReportDialog } from "@/components/ReportDialog";
-import { EditProfileDialog } from "@/components/EditProfileDialog";
-import { WhatsAppButton } from "@/components/WhatsAppButton";
-import { ProfileLoadingSkeleton } from "@/components/LoadingSkeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 type Profile = {
   id: string;
@@ -37,7 +24,6 @@ type Profile = {
   bio: string | null;
   followers_count: number;
   following_count: number;
-  whatsapp_number: string | null;
 };
 
 type Post = {
@@ -60,8 +46,6 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [postToDelete, setPostToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -152,77 +136,12 @@ const Profile = () => {
     }
   };
 
-  const handleDeletePost = async (postId: string) => {
-    if (!currentUserId) return;
-
-    const post = posts.find(p => p.id === postId);
-    if (!post) return;
-
-    // Optimistically remove from UI
-    setPosts((current) => current.filter(p => p.id !== postId));
-
-    // Close the dialog
-    setPostToDelete(null);
-
-    // Show undo toast with action
-    toast.success("Post deleted", {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          // Restore post to UI
-          setPosts((current) => [...current, post].sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          ));
-          clearTimeout(deleteTimeoutId);
-        }
-      },
-      duration: 5000,
-    });
-
-    // Set timeout for actual deletion
-    const deleteTimeoutId = setTimeout(async () => {
-      try {
-        // Delete from database
-        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
-          p_post_id: postId
-        });
-
-        if (deleteError) throw deleteError;
-
-        // Delete from storage
-        const storagePath = post.media_url.split('/').slice(-2).join('/');
-        await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
-        console.error('Error deleting post:', error);
-        // Restore post on error
-        setPosts((current) => [...current, post].sort((a, b) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ));
-        toast.error("Failed to delete post");
-      }
-    }, 5000);
-  };
-
-  const refreshProfile = async () => {
-    if (!username) return;
-    
-    try {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("username", username)
-        .single();
-
-      if (profileData) {
-        setProfile(profileData);
-      }
-    } catch (error) {
-      console.error('Error refreshing profile:', error);
-    }
-  };
-
   if (loading) {
-    return <ProfileLoadingSkeleton />;
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
   }
 
   if (!profile) {
@@ -246,14 +165,9 @@ const Profile = () => {
             <h1 className="text-xl font-semibold">{profile.username}</h1>
           </div>
           {isOwnProfile ? (
-            <div className="flex gap-2">
-              <Button variant="ghost" size="icon" onClick={() => setShowEditProfile(true)}>
-                <Edit className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
-                <Settings className="h-5 w-5" />
-              </Button>
-            </div>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
+              <Settings className="h-5 w-5" />
+            </Button>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -290,40 +204,6 @@ const Profile = () => {
           userId={profile.id}
         />
 
-        {isOwnProfile && profile && (
-          <EditProfileDialog
-            open={showEditProfile}
-            onOpenChange={setShowEditProfile}
-            profile={profile}
-            onProfileUpdate={refreshProfile}
-          />
-        )}
-
-        <AlertDialog open={!!postToDelete} onOpenChange={() => setPostToDelete(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Post</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete this post? This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  if (postToDelete) {
-                    handleDeletePost(postToDelete);
-                    setPostToDelete(null);
-                  }
-                }}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
         <div className="p-6">
           <div className="flex items-start gap-6 mb-6">
             <Avatar className="h-24 w-24">
@@ -334,36 +214,26 @@ const Profile = () => {
             </Avatar>
 
             <div className="flex-1">
-              <div className="flex items-center gap-4 mb-4 flex-wrap">
+              <div className="flex items-center gap-4 mb-4">
                 <h2 className="text-2xl font-bold">{profile.display_name}</h2>
                 {!isOwnProfile && currentUserId && (
-                  <>
-                    <Button 
-                      onClick={handleFollow}
-                      variant={isFollowing ? "outline" : "default"}
-                      size="sm"
-                    >
-                      {isFollowing ? (
-                        <>
-                          <UserMinus className="h-4 w-4 mr-1" />
-                          Unfollow
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4 mr-1" />
-                          Follow
-                        </>
-                      )}
-                    </Button>
-                    {profile.whatsapp_number && (
-                      <WhatsAppButton
-                        phoneNumber={profile.whatsapp_number}
-                        displayName={profile.display_name}
-                        variant="outline"
-                        size="sm"
-                      />
+                  <Button 
+                    onClick={handleFollow}
+                    variant={isFollowing ? "outline" : "default"}
+                    size="sm"
+                  >
+                    {isFollowing ? (
+                      <>
+                        <UserMinus className="h-4 w-4 mr-1" />
+                        Unfollow
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4 mr-1" />
+                        Follow
+                      </>
                     )}
-                  </>
+                  </Button>
                 )}
               </div>
 
@@ -394,38 +264,24 @@ const Profile = () => {
             <TabsContent value="posts" className="mt-6">
               <div className="grid grid-cols-3 gap-1">
                 {posts.map((post) => (
-                  <div key={post.id} className="relative group">
-                    <Card 
-                      className="aspect-square overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => {/* Could open post modal */}}
-                    >
-                      {post.media_type.startsWith("image") ? (
-                        <img 
-                          src={post.media_url} 
-                          alt={post.caption || "Post"} 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <video 
-                          src={post.media_url} 
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                    </Card>
-                    {isOwnProfile && (
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPostToDelete(post.id);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                  <Card 
+                    key={post.id} 
+                    className="aspect-square overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => {/* Could open post modal */}}
+                  >
+                    {post.media_type.startsWith("image") ? (
+                      <img 
+                        src={post.media_url} 
+                        alt={post.caption || "Post"} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <video 
+                        src={post.media_url} 
+                        className="w-full h-full object-cover"
+                      />
                     )}
-                  </div>
+                  </Card>
                 ))}
               </div>
               

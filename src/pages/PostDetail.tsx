@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { CommentSheet } from "@/components/CommentSheet";
 import { ShareSheet } from "@/components/ShareSheet";
 import { formatDistanceToNow } from "date-fns";
-import { PostDetailLoadingSkeleton } from "@/components/LoadingSkeleton";
 
 type Post = {
   id: string;
@@ -162,8 +161,12 @@ const PostDetail = () => {
     }
   };
 
-  if (loading || !post) {
-    return <PostDetailLoadingSkeleton />;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading post...</p>
+      </div>
+    );
   }
 
   if (!post) {

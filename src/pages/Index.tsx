@@ -1,12 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VerticalFeed } from "@/components/VerticalFeed";
 import { UploadButton } from "@/components/UploadButton";
 import { BottomNav } from "@/components/BottomNav";
-import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { FeedErrorBoundary } from "@/components/FeedErrorBoundary";
 import { toast } from "sonner";
 
 type Profile = {
@@ -76,25 +73,19 @@ const Index = () => {
   }
 
   return (
-    <ErrorBoundary>
-      <div className="relative bg-background min-h-screen">
-        <PWAInstallPrompt />
-        
-        <div className="flex justify-center">
-          <div className="relative w-full max-w-md">
-            <FeedErrorBoundary>
-              <VerticalFeed />
-            </FeedErrorBoundary>
-            
-            {showUpload && (
-              <UploadButton onClose={() => setShowUpload(false)} />
-            )}
-            
-            <BottomNav onUploadClick={handleUploadClick} userProfile={profile} />
-          </div>
+    <div className="relative bg-background">
+      <div className="flex justify-center">
+        <div className="relative w-full max-w-md">
+          <VerticalFeed />
+          
+          {showUpload && (
+            <UploadButton onClose={() => setShowUpload(false)} />
+          )}
+          
+          <BottomNav onUploadClick={handleUploadClick} userProfile={profile} />
         </div>
       </div>
-    </ErrorBoundary>
+    </div>
   );
 };
 
