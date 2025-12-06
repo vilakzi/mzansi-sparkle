@@ -216,6 +216,7 @@ export const VerticalFeed = () => {
     },
     [retryCount, fetchUserEngagement]
   );
+  };
 
   const loadMore = useCallback(async () => {
     if (isFetchingRef.current || loadingMore || !hasMore || posts.length === 0) {
@@ -286,7 +287,7 @@ export const VerticalFeed = () => {
   const trackView = async (postId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-
+      
       await supabase.from("post_views").insert({
         post_id: postId,
         user_id: user?.id || null,
