@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +30,8 @@ interface FeedPostProps {
   isActive: boolean;
   onLike: () => void;
   onSaveToggle: () => void;
+  onDelete?: () => void;
+  userId?: string;
   profile?: {
     display_name: string;
     username: string;
@@ -50,6 +52,8 @@ export const FeedPost = ({
   isActive,
   onLike,
   onSaveToggle,
+  onDelete,
+  userId,
   profile,
 }: FeedPostProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -61,43 +65,199 @@ export const FeedPost = ({
   const [isMuted, setIsMuted] = useState(true);
   const [progress, setProgress] = useState(0);
   const [showHeart, setShowHeart] = useState(false);
+  const lastTapRef = useRef<number>(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  
-  const lastTapRef = useRef<number>(0);
   const wasPlayingRef = useRef(false);
-  const doubleTapTimeoutRef = useRef<NodeJS.Timeout>();
-  const updateProgressRef = useRef<(() => void) | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const hasInitializedRef = useRef(false);
+  const preloadedRef = useRef(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [mediaError, setMediaError] = useState<{
+    type: string;
+    message: string;
+    isNetworkError: boolean;
+  } | null>(null);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [hasAutoRetried, setHasAutoRetried] = useState(false);
+  
+  const MAX_RETRIES = 1; // Reduced for faster error detection
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Handle active state changes
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isActive) {
-        videoRef.current.play().catch(() => {
-          // Autoplay may be blocked
-          setIsPlaying(false);
-        });
-        setIsPlaying(true);
-      } else {
-        videoRef.current.pause();
-        setIsPlaying(false);
+  // Enhanced media error handling with detailed logging
+  const handleMediaError = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const error = video.error;
+    const errorDetails = {
+      code: error?.code,
+      message: error?.message,
+      mediaUrl,
+      expectedUrl: mediaUrl,
+      actualSrc: video.src,
+      postId: id,
+      retryAttempt: retryCount + 1,
+    };
+
+    console.error('[FeedPost] Video loading error:', errorDetails);
+    console.error('[FeedPost] Video error object:', error);
+    console.error('[FeedPost] Video source:', video.src);
+    console.error('[FeedPost] Expected URL:', mediaUrl);
+    console.error('[FeedPost] URL mismatch:', video.src !== mediaUrl);
+    console.error('[FeedPost] Video ready state:', video.readyState);
+    console.error('[FeedPost] Video network state:', video.networkState);
+
+    // Use simple navigator.onLine check
+    const isOnline = navigator.onLine;
+
+    let errorType = 'Unknown Error';
+    let errorMessage = 'Unable to load video. Please try again.';
+    let isNetworkError = false;
+
+    // Categorize error based on error code
+    if (!isOnline) {
+      errorType = 'Network Error';
+      errorMessage = 'No internet connection. Please check your network and try again.';
+      isNetworkError = true;
+      console.error('[FeedPost] Network is offline');
+    } else if (error) {
+      switch (error.code) {
+        case MediaError.MEDIA_ERR_ABORTED:
+          errorType = 'Playback Aborted';
+          errorMessage = 'Video playback was aborted. Please try again.';
+          console.error('[FeedPost] Media error: Playback aborted by user');
+          break;
+        case MediaError.MEDIA_ERR_NETWORK:
+          errorType = 'Network Error';
+          errorMessage = 'Network error while loading video. Please check your connection.';
+          isNetworkError = true;
+          console.error('[FeedPost] Media error: Network error during download');
+          break;
+        case MediaError.MEDIA_ERR_DECODE:
+          errorType = 'Decode Error';
+          errorMessage = 'Video format not supported or file is corrupted.';
+          console.error('[FeedPost] Media error: Decode error (corrupted or unsupported format)');
+          break;
+        case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+          errorType = 'Source Not Supported';
+          errorMessage = 'Video source not found or format not supported.';
+          console.error('[FeedPost] Media error: Source not supported or not found (404/CORS)');
+          break;
+        default:
+          console.error('[FeedPost] Media error: Unknown error code', error.code);
       }
     }
-  }, [isActive]);
 
-  // Setup video event listeners
+    // Retry logic with quick retry
+    if (retryCount < MAX_RETRIES && isOnline) {
+      const delay = 1000; // Quick 1 second retry
+      console.log(`[FeedPost] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      setRetryCount(prev => prev + 1);
+      
+      setTimeout(() => {
+        console.log('[FeedPost] Attempting to reload video...');
+        if (videoRef.current) {
+          videoRef.current.load();
+        }
+      }, delay);
+    } else {
+      console.error('[FeedPost] Max retries reached or offline, showing error state');
+      setMediaError({
+        type: errorType,
+        message: errorMessage,
+        isNetworkError,
+      });
+      
+      // Auto-retry once after 2 seconds, then show persistent error
+      if (!hasAutoRetried && isOnline) {
+        setTimeout(() => {
+          console.log('[FeedPost] Auto-dismissing error and performing final retry...');
+          setHasAutoRetried(true);
+          setMediaError(null);
+          setRetryCount(0);
+          if (videoRef.current) {
+            videoRef.current.load();
+          }
+        }, 2000);
+      }
+    }
+  };
+
+  // Handle buffering and loading states
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || mediaType !== "video") return;
+    if (!video || mediaType !== 'video') return;
+
+    const handleWaiting = () => setIsBuffering(true);
+    const handleCanPlay = () => setIsBuffering(false);
+    const handleError = () => handleMediaError();
+
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('error', handleError);
+
+    return () => {
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('error', handleError);
+    };
+  }, [mediaType, retryCount]);
+
+  // Aggressive preload for smooth scrolling
+  useEffect(() => {
+    if (mediaType === 'video' && !preloadedRef.current && videoRef.current) {
+      videoRef.current.preload = 'auto';
+      videoRef.current.load(); // Force load immediately
+      preloadedRef.current = true;
+    }
+  }, [mediaType]);
+
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
+    };
+    getCurrentUser();
+  }, []);
+
+  // Handle initial video play on mount
+  useEffect(() => {
+    if (videoRef.current && mediaType === "video" && isActive && !hasInitializedRef.current) {
+      videoRef.current.play().catch(() => {
+        // Ignore autoplay errors
+      });
+      setIsPlaying(true);
+      hasInitializedRef.current = true;
+    }
+  }, [mediaType, isActive]);
+
+  // Handle video play/pause when isActive changes
+  useEffect(() => {
+    if (!videoRef.current || mediaType !== "video") return;
+    
+    if (isActive) {
+      videoRef.current.play().catch(() => {
+        // Ignore autoplay errors  
+      });
+      setIsPlaying(true);
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [isActive, mediaType]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
 
     const updateProgress = () => {
-      if (!isScrubbing && video.duration) {
-        const newProgress = (video.currentTime / video.duration) * 100;
-        setProgress(newProgress);
+      if (!isScrubbing) {
+        const progress = (video.currentTime / video.duration) * 100;
+        setProgress(progress);
         setCurrentTime(video.currentTime);
       }
     };
@@ -106,161 +266,172 @@ export const FeedPost = ({
       setDuration(video.duration);
     };
 
-    const handleEnded = () => {
-      setIsPlaying(false);
-    };
-
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleError = () => {
-      toast.error("Failed to load video");
-      if (import.meta.env.DEV) {
-        console.error("Video error:", video.error);
-      }
-    };
-
-    updateProgressRef.current = updateProgress;
-
-    video.addEventListener("timeupdate", updateProgress);
-    video.addEventListener("loadedmetadata", handleLoadedMetadata);
-    video.addEventListener("ended", handleEnded);
-    video.addEventListener("play", handlePlay);
-    video.addEventListener("pause", handlePause);
-    video.addEventListener("error", handleError);
-
+    video.addEventListener('timeupdate', updateProgress);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    
     return () => {
-      video.removeEventListener("timeupdate", updateProgress);
-      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      video.removeEventListener("ended", handleEnded);
-      video.removeEventListener("play", handlePlay);
-      video.removeEventListener("pause", handlePause);
-      video.removeEventListener("error", handleError);
+      video.removeEventListener('timeupdate', updateProgress);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, [mediaType, isScrubbing]);
+  }, [isScrubbing]);
 
-  const handleVideoClick = useCallback(() => {
+  const handleVideoClick = () => {
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
 
     if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
       // Double tap - like
-      if (doubleTapTimeoutRef.current) {
-        clearTimeout(doubleTapTimeoutRef.current);
-      }
-      onLike();
+      handleLike();
       setShowHeart(true);
-      doubleTapTimeoutRef.current = setTimeout(() => setShowHeart(false), 1000);
+      setTimeout(() => setShowHeart(false), 1000);
     } else {
       // Single tap - play/pause
       if (videoRef.current) {
         if (isPlaying) {
           videoRef.current.pause();
+          setIsPlaying(false);
         } else {
-          videoRef.current.play().catch(() => {
-            toast.error("Failed to play video");
-          });
+          videoRef.current.play();
+          setIsPlaying(true);
         }
       }
     }
 
     lastTapRef.current = now;
-  }, [isPlaying, onLike]);
+  };
 
-  const toggleMute = useCallback((e: React.MouseEvent) => {
+  const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (videoRef.current) {
       videoRef.current.muted = !isMuted;
       setIsMuted(!isMuted);
     }
-  }, [isMuted]);
+  };
 
-  const handleSeekBarChange = useCallback(
-    (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-      if (!videoRef.current) return;
-
-      e.stopPropagation();
-      e.preventDefault();
-
+  const handleSeekBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (videoRef.current) {
       wasPlayingRef.current = !videoRef.current.paused;
       videoRef.current.pause();
-      setIsScrubbing(true);
-
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const clientX =
-        "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-      const touchX = clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, touchX / rect.width));
-
+    }
+    
+    setIsScrubbing(true);
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const initialX = e.clientX - rect.left;
+    const initialPercentage = Math.max(0, Math.min(1, initialX / rect.width));
+    
+    if (videoRef.current) {
+      const newTime = initialPercentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(initialPercentage * 100);
+      setCurrentTime(newTime);
+    }
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const moveX = moveEvent.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+      
       if (videoRef.current) {
         const newTime = percentage * videoRef.current.duration;
         videoRef.current.currentTime = newTime;
         setProgress(percentage * 100);
         setCurrentTime(newTime);
       }
-    },
-    []
-  );
+    };
+    
+    const handleMouseUp = () => {
+      setIsScrubbing(false);
+      if (videoRef.current && wasPlayingRef.current) {
+        videoRef.current.play();
+        setIsPlaying(true);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
-  const handleSeekBarMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!videoRef.current || !isScrubbing) return;
-
-      const seekBar = document.querySelector("[data-seek-bar]");
-      if (!seekBar) return;
-
-      const rect = seekBar.getBoundingClientRect();
-      const moveX = e.clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, moveX / rect.width));
-
+  const handleSeekBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (videoRef.current) {
+      wasPlayingRef.current = !videoRef.current.paused;
+      videoRef.current.pause();
+    }
+    
+    setIsScrubbing(true);
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touchX = e.touches[0].clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, touchX / rect.width));
+    
+    if (videoRef.current) {
       const newTime = percentage * videoRef.current.duration;
       videoRef.current.currentTime = newTime;
       setProgress(percentage * 100);
       setCurrentTime(newTime);
-    },
-    [isScrubbing]
-  );
+    }
+  };
 
-  const handleSeekBarMouseUp = useCallback(() => {
+  const handleSeekBarTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (!isScrubbing) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touchX = e.touches[0].clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, touchX / rect.width));
+    
+    if (videoRef.current) {
+      const newTime = percentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(percentage * 100);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const handleSeekBarTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
     setIsScrubbing(false);
     if (videoRef.current && wasPlayingRef.current) {
-      videoRef.current.play().catch(() => {
-        toast.error("Failed to resume playback");
-      });
+      videoRef.current.play();
+      setIsPlaying(true);
     }
-    document.removeEventListener("mousemove", handleSeekBarMouseMove);
-    document.removeEventListener("mouseup", handleSeekBarMouseUp);
-  }, [handleSeekBarMouseMove]);
+  };
 
-  const handleSeekBarMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      handleSeekBarChange(e);
-      document.addEventListener("mousemove", handleSeekBarMouseMove);
-      document.addEventListener("mouseup", handleSeekBarMouseUp);
-    },
-    [handleSeekBarChange, handleSeekBarMouseMove, handleSeekBarMouseUp]
-  );
-
-  const handleSeekBarTouchEnd = useCallback(() => {
-    setIsScrubbing(false);
-    if (videoRef.current && wasPlayingRef.current) {
-      videoRef.current.play().catch(() => {
-        toast.error("Failed to resume playback");
-      });
+  const seekToPercentage = (percentage: number) => {
+    if (videoRef.current) {
+      const newTime = percentage * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(percentage * 100);
+      setCurrentTime(newTime);
     }
-  }, []);
+  };
 
-  const formatTime = useCallback((seconds: number) => {
-    if (!Number.isFinite(seconds)) return "0:00";
+  const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  }, []);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-  const renderedCaption = useMemo(() => {
+  const handleLike = () => {
+    onLike();
+  };
+
+  const renderCaption = () => {
     if (!caption) return null;
 
+    // Split caption by hashtags and render them as clickable
     const parts = caption.split(/(#[a-zA-Z0-9_]+)/g);
-
+    
     return (
       <p className="mb-4 text-white text-lg font-medium pointer-events-auto">
         {parts.map((part, index) => {
@@ -283,114 +454,118 @@ export const FeedPost = ({
         })}
       </p>
     );
-  }, [caption, navigate]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (doubleTapTimeoutRef.current) {
-        clearTimeout(doubleTapTimeoutRef.current);
-      }
-      document.removeEventListener("mousemove", handleSeekBarMouseMove);
-      document.removeEventListener("mouseup", handleSeekBarMouseUp);
-    };
-  }, [handleSeekBarMouseMove, handleSeekBarMouseUp]);
+  };
 
   return (
-    <div className="relative h-screen w-full snap-start snap-always">
+    <div className="relative h-screen w-full snap-start snap-always will-change-transform touch-none">
       {mediaType === "video" ? (
         <div className="relative h-full w-full">
-          <video
-            ref={videoRef}
-            src={mediaUrl}
-            className="h-full w-full object-cover pointer-events-none"
-            loop
-            playsInline
-            muted={isMuted}
-            onClick={handleVideoClick}
-          />
-
-          {/* Click overlay */}
-          <div
-            className="absolute inset-0 z-10 cursor-pointer"
-            onClick={handleVideoClick}
-          />
-
-          {/* Seek bar */}
-          <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
-            <div className="flex items-center gap-2 text-white text-xs mb-1">
-              <span>{formatTime(currentTime)}</span>
-              <span>/</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-            <div
-              data-seek-bar
-              className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
-              onMouseDown={handleSeekBarMouseDown}
-              onTouchStart={handleSeekBarChange}
-              onTouchMove={handleSeekBarChange}
-              onTouchEnd={handleSeekBarTouchEnd}
-            >
-              <div
-                className="h-full bg-white rounded-full transition-all duration-100"
-                style={{ width: `${progress}%` }}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ left: `${progress}%`, transform: "translate(-50%, -50%)" }}
-              />
-            </div>
-          </div>
-
-          {/* Play/Pause indicator */}
-          {!isPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="bg-black/50 rounded-full p-4">
-                <Play className="h-16 w-16 text-white" fill="white" />
+          {mediaError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-6 space-y-4">
+              <div className="text-center space-y-2">
+                <p className="text-lg font-semibold text-red-400">{mediaError.type}</p>
+                <p className="text-sm text-gray-300">{mediaError.message}</p>
+                {mediaError.isNetworkError && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Check your internet connection and try again
+                  </p>
+                )}
               </div>
-            </div>
-          )}
-
-          {/* Double tap heart animation */}
-          {showHeart && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <Heart
-                className="h-32 w-32 text-red-500 animate-ping"
-                fill="red"
-              />
-            </div>
-          )}
-
-          {/* Volume control */}
-          <button
-            onClick={toggleMute}
-            className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-30 pointer-events-auto hover:bg-black/70"
-          >
-            {isMuted ? (
-              <VolumeX className="h-6 w-6" />
-            ) : (
-              <Volume2 className="h-6 w-6" />
-            )}
-          </button>
-
-          {/* More options menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
               <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-30 pointer-events-auto"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  console.log('[FeedPost] Manual retry initiated by user');
+                  setMediaError(null);
+                  setRetryCount(0);
+                  setHasAutoRetried(false); // Reset auto-retry flag for manual retry
+                  if (videoRef.current) videoRef.current.load();
+                }}
               >
-                <MoreVertical className="h-6 w-6" />
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="z-[100]">
-              <DropdownMenuItem onClick={() => setShowReport(true)}>
-                <Flag className="h-4 w-4 mr-2" />
-                Report Post
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </div>
+          ) : (
+            <>
+              <div className="absolute inset-0 pointer-events-none touch-auto" onClick={handleVideoClick}>
+                <div className="w-full h-full pointer-events-auto" />
+              </div>
+              <video
+                ref={videoRef}
+                src={mediaUrl}
+                className="h-full w-full object-cover pointer-events-none will-change-transform"
+                loop
+                playsInline
+                muted={isMuted}
+                preload="auto"
+              />
+
+              {/* Buffering indicator - subtle overlay */}
+              {isBuffering && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-none">
+                  <div className="bg-black/60 rounded-full p-3 shadow-lg">
+                    <RefreshCw className="h-6 w-6 text-white animate-spin" />
+                  </div>
+                </div>
+              )}
+
+              {/* Play/Pause indicator */}
+              {!isPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-black/50 rounded-full p-4">
+                    <Play className="h-16 w-16 text-white" fill="white" />
+                  </div>
+                </div>
+              )}
+
+              {/* Double tap heart animation */}
+              {showHeart && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <Heart 
+                    className="h-32 w-32 text-red-500 animate-ping" 
+                    fill="red"
+                  />
+                </div>
+              )}
+
+              {/* Volume control */}
+              <button
+                onClick={toggleMute}
+                className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
+              >
+                {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
+              </button>
+
+              {/* More options menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
+                  >
+                    <MoreVertical className="h-6 w-6" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="z-[100] bg-background">
+                  {currentUserId === userId && onDelete && (
+                    <DropdownMenuItem 
+                      onClick={onDelete}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Post
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => setShowReport(true)}>
+                    <Flag className="h-4 w-4 mr-2" />
+                    Report Post
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
         </div>
       ) : (
         <img
@@ -398,39 +573,43 @@ export const FeedPost = ({
           alt="Post"
           className="h-full w-full object-cover"
           loading="lazy"
+          decoding="async"
         />
       )}
-
-      {/* Gradient overlay with stats */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none z-20">
+      
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none z-10">
         {profile && (
           <div className="mb-4 pointer-events-auto">
-            <Avatar
+            <Avatar 
               className="h-12 w-12 border-2 border-white cursor-pointer transition-transform active:scale-90"
               onClick={() => navigate(`/profile/${profile.username}`)}
             >
               <AvatarImage src={profile.avatar_url || undefined} />
               <AvatarFallback className="bg-primary text-primary-foreground">
-                {profile.display_name[0]?.toUpperCase() || "U"}
+                {profile.display_name[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
           </div>
         )}
-
-        {renderedCaption}
-
+        
+        
+        {renderCaption()}
+        
         <div className="flex items-center justify-between mb-2 pointer-events-auto">
           <div className="flex items-center gap-6">
             <button
-              onClick={onLike}
+              onClick={handleLike}
               className="flex items-center gap-2 text-white transition-transform active:scale-90"
             >
               <Heart
-                className={cn("h-8 w-8", isLiked && "fill-red-500 text-red-500")}
+                className={cn(
+                  "h-8 w-8",
+                  isLiked && "fill-red-500 text-red-500"
+                )}
               />
               <span className="text-lg font-semibold">{likesCount}</span>
             </button>
-
+            
             <button
               onClick={() => setShowComments(true)}
               className="flex items-center gap-2 text-white transition-transform active:scale-90"
@@ -438,7 +617,7 @@ export const FeedPost = ({
               <MessageCircle className="h-8 w-8" />
               <span className="text-lg font-semibold">{commentsCount}</span>
             </button>
-
+            
             <button
               onClick={() => setShowShare(true)}
               className="flex items-center gap-2 text-white transition-transform active:scale-90"
@@ -447,22 +626,54 @@ export const FeedPost = ({
               <span className="text-lg font-semibold">{sharesCount}</span>
             </button>
           </div>
-
+          
           <button
             onClick={onSaveToggle}
             className="text-white transition-transform active:scale-90"
           >
-            <Bookmark className={cn("h-8 w-8", isSaved && "fill-white")} />
+            <Bookmark
+              className={cn(
+                "h-8 w-8",
+                isSaved && "fill-white"
+              )}
+            />
           </button>
         </div>
       </div>
 
+      {/* Interactive seekbar - positioned after gradient to ensure visibility */}
+      {mediaType === 'video' && (
+        <div className="absolute bottom-24 left-0 right-0 px-4 z-[70] pointer-events-auto">
+          <div className="flex items-center gap-2 text-white text-xs mb-1">
+            <span>{formatTime(currentTime)}</span>
+            <span>/</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+          <div 
+            className="relative h-1 bg-white/30 rounded-full cursor-pointer group py-3"
+            onMouseDown={handleSeekBarMouseDown}
+            onTouchStart={handleSeekBarTouch}
+            onTouchMove={handleSeekBarTouchMove}
+            onTouchEnd={handleSeekBarTouchEnd}
+          >
+            <div 
+              className="h-1 bg-white rounded-full transition-all duration-100"
+              style={{ width: `${progress}%` }}
+            />
+            <div 
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+            />
+          </div>
+        </div>
+      )}
+      
       <CommentSheet
-        postId={id}
-        isOpen={showComments}
-        onClose={() => setShowComments(false)}
+        postId={id} 
+        isOpen={showComments} 
+        onClose={() => setShowComments(false)} 
       />
-
+      
       <ShareSheet
         postId={id}
         isOpen={showShare}
@@ -477,5 +688,3 @@ export const FeedPost = ({
     </div>
   );
 };
-
-export default FeedPost;

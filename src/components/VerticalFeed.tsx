@@ -1,7 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FeedPost } from "./FeedPost";
+import { PostErrorBoundary } from "./PostErrorBoundary";
 import { toast } from "sonner";
+import { FeedLoadingSkeleton } from "./LoadingSkeleton";
+import { RefreshCw } from "lucide-react";
+import { Button } from "./ui/button";
+import { prefetchVideos } from "@/lib/pwaUtils";
 
 interface Post {
   id: string;
@@ -12,6 +17,7 @@ interface Post {
   comments_count: number;
   shares_count: number;
   created_at: string;
+  user_id: string;
   user_liked?: boolean;
   user_saved?: boolean;
   profile?: {
@@ -21,50 +27,68 @@ interface Post {
   };
 }
 
-const BATCH_SIZE = 15;
-
 export const VerticalFeed = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [windowStart, setWindowStart] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const postDetectionObserverRef = useRef<IntersectionObserver | null>(null);
   const lastPostRef = useRef<HTMLDivElement>(null);
-  const paginationCursorRef = useRef<string | null>(null);
-  const isFetchingRef = useRef(false);
-  const channelRef = useRef<any>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartYRef = useRef<number>(0);
+  const isAtTopRef = useRef<boolean>(false);
+  const currentIndexRef = useRef<number>(0);
+  
+  // Virtual scrolling settings - CRITICAL for memory management
+  const WINDOW_SIZE = 10; // Render 10 posts in window (5 above + current + 4 below)
+  const PRELOAD_COUNT = 2; // Preload 2 videos ahead
+  const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
+  
+  // Calculate visible window of posts for virtual scrolling
+  const visibleStart = Math.max(0, windowStart);
+  const visibleEnd = Math.min(posts.length, windowStart + WINDOW_SIZE);
+  const visiblePosts = posts.slice(visibleStart, visibleEnd);
+  
+  // Virtual scrolling: calculate spacer heights to maintain scroll position
+  const postHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const topSpacerHeight = visibleStart * postHeight;
+  const bottomSpacerHeight = Math.max(0, (posts.length - visibleEnd) * postHeight);
 
-  // Initial fetch on mount
   useEffect(() => {
-    fetchPosts();
-    const cleanup = setupRealtimeSubscription();
-    
-    return () => {
-      cleanup();
-      if (observerRef.current) {
-        observerRef.current.disconnect();
+    const initializeUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUserId(session.user.id);
       }
     };
+    initializeUser();
   }, []);
 
-  // Setup intersection observer for infinite scroll
   useEffect(() => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
+    if (userId) {
+      fetchPosts();
+      const cleanup = setupRealtimeSubscription();
+      return cleanup;
     }
+  }, [userId]);
 
+
+  useEffect(() => {
+    // Setup intersection observer for infinite scroll
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading && !isFetchingRef.current) {
+        if (entries[0].isIntersecting && !loadingMore && !loading) {
           loadMore();
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.5 }
     );
 
     if (lastPostRef.current) {
@@ -76,272 +100,456 @@ export const VerticalFeed = () => {
         observerRef.current.disconnect();
       }
     };
-  }, [hasMore, loadingMore, loading]);
+  }, [loadingMore, loading, posts.length]);
 
-  const fetchUserEngagement = useCallback(
-    async (postIds: string[], userId?: string) => {
-      if (!userId || postIds.length === 0) {
-        return { likedPostIds: new Set(), savedPostIds: new Set() };
-      }
+  // Keep currentIndexRef in sync with currentIndex
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
-      try {
-        const [{ data: userLikes }, { data: userSaved }] = await Promise.all([
-          supabase
-            .from("post_likes")
-            .select("post_id")
-            .eq("user_id", userId)
-            .in("post_id", postIds),
-          supabase
-            .from("saved_posts")
-            .select("post_id")
-            .eq("user_id", userId)
-            .in("post_id", postIds),
-        ]);
+  // IntersectionObserver for accurate post detection (works with variable heights)
+  useEffect(() => {
+    if (!containerRef.current || posts.length === 0) return;
 
-        return {
-          likedPostIds: new Set(userLikes?.map((like) => like.post_id) || []),
-          savedPostIds: new Set(userSaved?.map((save) => save.post_id) || []),
-        };
-      } catch (err) {
-        console.error("Failed to fetch user engagement:", err);
-        return { likedPostIds: new Set(), savedPostIds: new Set() };
-      }
-    },
-    []
-  );
+    const observerOptions = {
+      root: containerRef.current,
+      threshold: [0, 0.25, 0.5, 0.75, 1], // Multiple thresholds for smooth tracking
+      rootMargin: '0px'
+    };
 
-  const fetchPosts = useCallback(
-    async (cursor?: string) => {
-      if (isFetchingRef.current) return;
+    postDetectionObserverRef.current = new IntersectionObserver((entries) => {
+      // Find the most visible post (highest intersection ratio)
+      let maxRatio = 0;
+      let mostVisibleIndex = currentIndexRef.current;
 
-      try {
-        isFetchingRef.current = true;
-        setError(null);
-
-        let query = supabase
-          .from("posts")
-          .select(
-            `
-            *,
-            profiles:user_id (
-              display_name,
-              username,
-              avatar_url
-            )
-          `,
-            { count: "exact" }
-          )
-          .order("created_at", { ascending: false })
-          .limit(BATCH_SIZE);
-
-        if (cursor) {
-          query = query.lt("created_at", cursor);
-        }
-
-        const { data: postsData, error: queryError } = await query;
-
-        if (queryError) {
-          throw queryError;
-        }
-
-        if (!postsData || postsData.length === 0) {
-          setHasMore(false);
-          if (!cursor) {
-            setPosts([]);
+      entries.forEach((entry) => {
+        if (entry.intersectionRatio > maxRatio) {
+          maxRatio = entry.intersectionRatio;
+          const indexAttr = entry.target.getAttribute('data-post-index');
+          if (indexAttr) {
+            mostVisibleIndex = parseInt(indexAttr, 10);
           }
-          isFetchingRef.current = false;
-          return;
         }
+      });
 
-        // Check if there are more posts
-        if (postsData.length < BATCH_SIZE) {
-          setHasMore(false);
-        }
-
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-
-        // Fetch user engagement (likes and saves)
-        const postIds = postsData.map((p) => p.id);
-        const { likedPostIds, savedPostIds } = await fetchUserEngagement(
-          postIds,
-          user?.id
-        );
-
-        // Transform posts with engagement data
-        const transformedPosts = postsData.map((post: any) => ({
-          ...post,
-          user_liked: likedPostIds.has(post.id),
-          user_saved: savedPostIds.has(post.id),
-          profile: post.profiles,
-        })) as Post[];
-
-        // Avoid duplicates when appending
-        if (cursor) {
-          setPosts((current) => {
-            const existingIds = new Set(current.map((p) => p.id));
-            const newPosts = transformedPosts.filter(
-              (p) => !existingIds.has(p.id)
-            );
-            return [...current, ...newPosts];
-          });
-        } else {
-          setPosts(transformedPosts);
-        }
-
-        // Update cursor for next fetch
-        if (transformedPosts.length > 0) {
-          paginationCursorRef.current =
-            transformedPosts[transformedPosts.length - 1].created_at;
-        }
-
-        setRetryCount(0);
-      } catch (err) {
-        console.error("Error fetching posts:", err);
-        setError(err instanceof Error ? err.message : "Failed to load posts");
+      // Update only if we found a more visible post (>50% visible)
+      if (maxRatio >= 0.5 && mostVisibleIndex !== currentIndexRef.current) {
+        setCurrentIndex(mostVisibleIndex);
         
-        // Retry logic
-        if (retryCount < 2) {
-          setRetryCount((prev) => prev + 1);
-          toast.error("Retrying...");
-          setTimeout(() => fetchPosts(cursor), 2000);
-        } else {
-          toast.error("Failed to load posts. Please try again.");
+        // Update window for virtualization
+        const newWindowStart = Math.max(0, mostVisibleIndex - Math.floor(WINDOW_SIZE / 2));
+        setWindowStart(newWindowStart);
+        
+        // Track view
+        if (posts[mostVisibleIndex]) {
+          trackView(posts[mostVisibleIndex].id);
         }
-      } finally {
+        
+        console.log(`[VerticalFeed] Post ${mostVisibleIndex} is now active (${Math.round(maxRatio * 100)}% visible)`);
+      }
+    }, observerOptions);
+
+    // Observe all visible post elements in the virtual window
+    const postElements = containerRef.current.querySelectorAll('[data-post-index]');
+    postElements.forEach((el) => {
+      if (postDetectionObserverRef.current) {
+        postDetectionObserverRef.current.observe(el);
+      }
+    });
+
+    return () => {
+      if (postDetectionObserverRef.current) {
+        postDetectionObserverRef.current.disconnect();
+      }
+    };
+  }, [posts, visibleStart, visibleEnd, WINDOW_SIZE]);
+
+  // Smart video preloading - only preload within 2 positions of current view
+  useEffect(() => {
+    if (!containerRef.current || posts.length === 0) return;
+
+    const preloadDistance = 2; // Preload videos within 2 positions (before and after)
+    
+    // Calculate preload range: 2 behind and 2 ahead
+    const preloadStart = Math.max(0, currentIndex - preloadDistance);
+    const preloadEnd = Math.min(posts.length - 1, currentIndex + preloadDistance);
+
+    // Smart preload: only load videos in the narrow window around current post
+    for (let i = preloadStart; i <= preloadEnd; i++) {
+      const post = posts[i];
+      if (post.media_type !== 'video') continue;
+      
+      const postElement = containerRef.current.querySelector(`[data-post-index="${i}"]`);
+      if (postElement) {
+        const video = postElement.querySelector('video');
+        if (video && video.readyState < 2) {
+          // Only preload if within the smart distance
+          video.load();
+          console.log(`[VerticalFeed] Preloading video ${i} (distance from current: ${Math.abs(i - currentIndex)})`);
+        }
+      }
+    }
+
+    // Auto-pause videos outside the preload window to save bandwidth
+    posts.forEach((post, index) => {
+      if (post.media_type !== 'video') return;
+      
+      const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
+      if (!postElement) return;
+      
+      const video = postElement.querySelector('video');
+      if (!video) return;
+
+      const distanceFromCurrent = Math.abs(index - currentIndex);
+      
+      // Pause videos outside the 2-position window
+      if (distanceFromCurrent > preloadDistance && !video.paused) {
+        video.pause();
+        console.log(`[VerticalFeed] Auto-paused video ${index} (distance: ${distanceFromCurrent})`);
+      }
+      
+      // Ensure non-active videos are paused
+      if (index !== currentIndex && !video.paused) {
+        video.pause();
+      }
+    });
+  }, [currentIndex, posts]);
+
+  const fetchPosts = async (cursor?: string, isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else if (cursor) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
         setLoading(false);
         setLoadingMore(false);
-        isFetchingRef.current = false;
+        setIsRefreshing(false);
+        return;
       }
-    },
-    [retryCount, fetchUserEngagement]
-  );
 
-  const loadMore = useCallback(async () => {
-    if (isFetchingRef.current || loadingMore || !hasMore || posts.length === 0) {
-      return;
-    }
+      const BATCH_SIZE = 20;
+      const offset = cursor ? posts.length : 0;
 
-    setLoadingMore(true);
-    await fetchPosts(paginationCursorRef.current || undefined);
-  }, [fetchPosts, hasMore, loadingMore, posts.length]);
+      // Simple direct query - specify the relationship explicitly
+      const { data: fetchedPosts, error } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          media_url,
+          media_type,
+          caption,
+          likes_count,
+          comments_count,
+          shares_count,
+          saves_count,
+          views_count,
+          created_at,
+          user_id,
+          profiles!posts_user_id_fkey(username, display_name, avatar_url)
+        `)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + BATCH_SIZE - 1);
 
-  const setupRealtimeSubscription = useCallback(() => {
-    try {
-      channelRef.current = supabase
-        .channel("posts-changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "posts",
-          },
-          (payload) => {
-            const newPost = {
-              ...payload.new,
-              user_liked: false,
-              user_saved: false,
-              profile: (payload.new as any).profiles,
-            } as Post;
-            
-            setPosts((current) => {
-              // Avoid duplicates
-              if (current.some((p) => p.id === newPost.id)) {
-                return current;
-              }
-              return [newPost, ...current];
-            });
-          }
-        )
-        .subscribe();
+      if (error) throw error;
 
-      return () => {
-        if (channelRef.current) {
-          supabase.removeChannel(channelRef.current);
+      // Check if user liked/saved each post
+      const postIds = (fetchedPosts || []).map(p => p.id);
+      const [likesData, savesData] = await Promise.all([
+        supabase.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', session.user.id),
+        supabase.from('saved_posts').select('post_id').in('post_id', postIds).eq('user_id', session.user.id)
+      ]);
+
+      const likedPostIds = new Set(likesData.data?.map(l => l.post_id) || []);
+      const savedPostIds = new Set(savesData.data?.map(s => s.post_id) || []);
+
+      // Map to Post interface with URL validation
+      const postsWithDetails = (fetchedPosts || []).map((post: any) => {
+        // Validate media_url format
+        if (post.media_type === 'video' && !post.media_url?.includes('supabase')) {
+          console.warn('[VerticalFeed] Suspicious video URL detected:', {
+            postId: post.id,
+            mediaUrl: post.media_url,
+            expectedFormat: 'Should contain supabase storage URL'
+          });
         }
-      };
-    } catch (err) {
-      console.error("Error setting up realtime subscription:", err);
-      return () => {};
+        
+        return {
+          id: post.id,
+          media_url: post.media_url,
+          media_type: post.media_type,
+          caption: post.caption,
+          likes_count: post.likes_count,
+          comments_count: post.comments_count,
+          shares_count: post.shares_count,
+          created_at: post.created_at,
+          user_id: post.user_id,
+          user_liked: likedPostIds.has(post.id),
+          user_saved: savedPostIds.has(post.id),
+          profile: {
+            display_name: post.profiles.display_name,
+            username: post.profiles.username,
+            avatar_url: post.profiles.avatar_url
+          }
+        };
+      });
+
+      // Smart video prefetching based on network quality
+      const connection = (navigator as any).connection;
+      const effectiveType = connection?.effectiveType || '4g';
+      const isSlowConnection = ['slow-2g', '2g', '3g'].includes(effectiveType);
+      
+      // Reduce prefetch on slow networks
+      const prefetchLimit = isSlowConnection ? 2 : 3;
+      const videoUrls = postsWithDetails
+        .filter(post => post.media_type === 'video')
+        .slice(0, prefetchLimit)
+        .map(post => post.media_url);
+      
+      if (videoUrls.length > 0 && !isSlowConnection) {
+        console.log(`[VerticalFeed] Prefetching ${videoUrls.length} videos (Network: ${effectiveType})`);
+        prefetchVideos(videoUrls).catch(err => 
+          console.warn('[VerticalFeed] Video prefetch failed:', err)
+        );
+      } else if (isSlowConnection) {
+        console.log(`[VerticalFeed] Skipping prefetch on slow network (${effectiveType})`);
+      }
+
+      if (isRefresh) {
+        setPosts(postsWithDetails);
+      } else if (cursor) {
+        setPosts((current) => [...current, ...postsWithDetails]);
+      } else {
+        setPosts(postsWithDetails);
+      }
+
+      // Check if we have more posts
+      setHasMore(fetchedPosts && fetchedPosts.length === BATCH_SIZE);
+      
+      setLoading(false);
+      setLoadingMore(false);
+      setIsRefreshing(false);
+    } catch (error: any) {
+      console.error('Feed fetch error:', error);
+      toast.error("Failed to load posts");
+      
+      setLoading(false);
+      setLoadingMore(false);
+      setIsRefreshing(false);
+      setHasMore(false);
     }
-  }, []);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || posts.length === 0) return;
+    await fetchPosts("load-more");
+  };
+
+  const handleRefresh = async () => {
+    if (!userId) return;
+    
+    setIsRefreshing(true);
+    
+    try {
+      // Get timestamp of newest post in current feed
+      const newestPostTime = posts[0]?.created_at;
+      
+      // Just do a full refresh
+      await fetchPosts(undefined, true);
+      toast.success("Feed refreshed");
+    } catch (error) {
+      console.error('Refresh error:', error);
+      toast.error("Failed to refresh feed");
+    }
+    
+    setIsRefreshing(false);
+  };
+
+  const scrollToTop = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  // Pull-to-refresh handlers - only activates at top
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!containerRef.current) return;
+    
+    const isAtTop = containerRef.current.scrollTop <= 1;
+    isAtTopRef.current = isAtTop;
+    
+    if (isAtTop) {
+      touchStartYRef.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!containerRef.current || !isAtTopRef.current) return;
+    
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartYRef.current;
+    
+    // Only track downward pulls when at top
+    if (diff > 0 && containerRef.current.scrollTop <= 1) {
+      // Apply resistance for natural feel
+      const resistance = 0.4;
+      const maxPull = 120;
+      const distance = Math.min(diff * resistance, maxPull);
+      
+      setPullDistance(distance);
+      // Removed e.preventDefault() to allow normal mobile scrolling
+    } else {
+      setPullDistance(0);
+      isAtTopRef.current = false;
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    const threshold = 60;
+    
+    if (pullDistance >= threshold && !isRefreshing) {
+      await handleRefresh();
+    }
+    
+    // Reset
+    setPullDistance(0);
+    touchStartYRef.current = 0;
+    isAtTopRef.current = false;
+  };
+
+
+  const setupRealtimeSubscription = () => {
+    const channel = supabase
+      .channel("posts-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "posts",
+        },
+        async (payload) => {
+          // New post added - could fetch if needed
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
-
-    const scrollTop = containerRef.current.scrollTop;
-    const index = Math.round(scrollTop / window.innerHeight);
-
-    if (index !== currentIndex) {
-      setCurrentIndex(Math.max(0, index));
-
-      // Track view when user scrolls to a new post
-      if (posts[index]) {
-        trackView(posts[index].id);
-      }
+    
+    // Debounce scroll handling
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
-  }, [currentIndex, posts]);
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (!containerRef.current) return;
+      
+      // IntersectionObserver now handles post detection
+      // This only handles load-more trigger
+      const postsRemaining = posts.length - currentIndexRef.current;
+      if (postsRemaining <= LOAD_TRIGGER && !loadingMore && hasMore) {
+        loadMore();
+      }
+    }, 150);
+  }, [posts.length, loadingMore, hasMore]);
+
+  const markPostAsSeen = async (postId: string) => {
+    if (!userId) return;
+    
+    // Silently track in background for smart rotation
+    try {
+      await supabase.from('user_seen_posts').upsert({
+        user_id: userId,
+        post_id: postId,
+        last_seen_at: new Date().toISOString()
+      }, { onConflict: 'user_id,post_id' });
+    } catch (error) {
+      // Fail silently
+    }
+  };
 
   const trackView = async (postId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-
+      
       await supabase.from("post_views").insert({
         post_id: postId,
         user_id: user?.id || null,
-        watch_duration: 0,
       });
-    } catch (error) {
-      // Silently fail - view tracking is not critical
-      if (import.meta.env.DEV) {
-        console.error("View tracking error:", error);
+
+      // Mark post as seen for smart feed rotation
+      if (user?.id) {
+        markPostAsSeen(postId);
       }
+    } catch (error) {
+      // Silently fail
     }
   };
 
-  const handleLike = useCallback(async (postId: string) => {
+  const handleLike = async (postId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Please sign in to like posts");
       return;
     }
 
-    try {
-      const { data, error } = await supabase.rpc("toggle_post_like", {
-        p_post_id: postId,
-      });
+    // Optimistic UI update - instant feedback!
+    const previousPosts = [...posts];
+    setPosts((current) =>
+      current.map((post) =>
+        post.id === postId
+          ? { 
+              ...post, 
+              likes_count: post.user_liked ? post.likes_count - 1 : post.likes_count + 1,
+              user_liked: !post.user_liked 
+            }
+          : post
+      )
+    );
 
-      if (error) throw error;
+    // Make API call
+    const { error } = await supabase.rpc("toggle_post_like", {
+      p_post_id: postId,
+    });
 
-      if (data && data.length > 0) {
-        const { liked, new_count } = data[0];
-
-        setPosts((current) =>
-          current.map((post) =>
-            post.id === postId
-              ? { ...post, likes_count: new_count, user_liked: liked }
-              : post
-          )
-        );
-      }
-    } catch (err) {
+    if (error) {
+      // Rollback on error
+      setPosts(previousPosts);
       toast.error("Failed to update like");
       if (import.meta.env.DEV) {
-        console.error(err);
+        console.error(error);
       }
     }
-  }, []);
+  };
 
-  const handleSaveToggle = useCallback(async (postId: string) => {
+  const handleSaveToggle = async (postId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Please sign in to save posts");
       return;
     }
 
-    const post = posts.find((p) => p.id === postId);
+    const post = posts.find(p => p.id === postId);
     if (!post) return;
+
+    // Optimistic UI update
+    const previousPosts = [...posts];
+    setPosts((current) =>
+      current.map((p) =>
+        p.id === postId ? { ...p, user_saved: !p.user_saved } : p
+      )
+    );
 
     try {
       if (post.user_saved) {
@@ -363,97 +571,230 @@ export const VerticalFeed = () => {
         if (error) throw error;
         toast.success("Post saved");
       }
-
-      setPosts((current) =>
-        current.map((p) =>
-          p.id === postId ? { ...p, user_saved: !p.user_saved } : p
-        )
-      );
     } catch (error: any) {
+      // Rollback on error
+      setPosts(previousPosts);
       toast.error("Failed to save post");
       if (import.meta.env.DEV) {
         console.error(error);
       }
     }
-  }, [posts]);
+  };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading feed...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleDeletePost = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
 
-  if (error && posts.length === 0) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <p className="text-destructive mb-4">{error}</p>
-          <button
-            onClick={() => {
-              setError(null);
-              setLoading(true);
-              fetchPosts();
-            }}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+    // Optimistically remove from UI
+    setPosts((current) => current.filter(p => p.id !== postId));
 
-  if (posts.length === 0) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">No posts yet. Be the first to post!</p>
-      </div>
-    );
+    // Show undo toast
+    const undoToastId = toast.success("Post deleted", {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          // Restore post
+          setPosts((current) => {
+            const newPosts = [...current];
+            const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
+            if (insertIndex === -1) {
+              newPosts.push(post);
+            } else {
+              newPosts.splice(insertIndex, 0, post);
+            }
+            return newPosts;
+          });
+          clearTimeout(deleteTimeoutId);
+        }
+      },
+      duration: 5000,
+    });
+
+    // Actual deletion
+    const deleteTimeoutId = setTimeout(async () => {
+      try {
+        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
+          p_post_id: postId
+        });
+
+        if (deleteError) throw deleteError;
+
+        // Delete from storage
+        const storagePath = post.media_url.split('/').slice(-2).join('/');
+        await supabase.storage.from('posts-media').remove([storagePath]);
+      } catch (error: any) {
+        console.error('Error deleting post:', error);
+        // Restore post on error
+        setPosts((current) => {
+          const newPosts = [...current];
+          const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
+          if (insertIndex === -1) {
+            newPosts.push(post);
+          } else {
+            newPosts.splice(insertIndex, 0, post);
+          }
+          return newPosts;
+        });
+        toast.error("Failed to delete post");
+      }
+    }, 5000);
+  };
+
+  if (loading && posts.length === 0) {
+    return <FeedLoadingSkeleton />;
   }
 
   return (
-    <div className="flex justify-center bg-background">
-      <div
-        ref={containerRef}
-        className="h-screen w-full max-w-md snap-y snap-mandatory overflow-y-scroll scrollbar-hide"
-        onScroll={handleScroll}
-      >
-        {posts.map((post, index) => (
-          <div
-            key={post.id}
-            ref={index === posts.length - 3 ? lastPostRef : undefined}
-          >
-            <FeedPost
-              id={post.id}
-              mediaUrl={post.media_url}
-              mediaType={post.media_type}
-              caption={post.caption}
-              likesCount={post.likes_count}
-              commentsCount={post.comments_count}
-              sharesCount={post.shares_count}
-              isSaved={post.user_saved || false}
-              isLiked={post.user_liked || false}
-              isActive={index === currentIndex}
-              onLike={() => handleLike(post.id)}
-              onSaveToggle={() => handleSaveToggle(post.id)}
-              profile={post.profile}
+    <div className="h-screen flex flex-col bg-background">
+      {/* Pull-to-refresh indicator */}
+      {pullDistance > 0 && (
+        <div 
+          className="absolute top-0 left-0 right-0 z-50 flex justify-center items-center pointer-events-none"
+          style={{
+            height: `${Math.min(pullDistance * 1.2, 80)}px`,
+            opacity: Math.min(pullDistance / 60, 1),
+          }}
+        >
+          <div className="bg-background/95 backdrop-blur-sm rounded-full p-3 shadow-lg">
+            <RefreshCw 
+              className={`h-5 w-5 text-primary transition-transform duration-200 ${
+                pullDistance >= 60 ? 'animate-spin' : ''
+              }`}
+              style={{
+                transform: `rotate(${pullDistance * 3}deg)`,
+              }}
             />
           </div>
-        ))}
-        {loadingMore && (
-          <div className="flex h-screen items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent mx-auto mb-2" />
-              <p className="text-muted-foreground">Loading more posts...</p>
+        </div>
+      )}
+
+      {/* Simple Refresh Button */}
+      <div className="absolute top-4 right-4 z-10">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="touch-manipulation active:scale-90 transition-transform bg-background/80 backdrop-blur-sm"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
+
+      {/* Feed Container - Optimized for mobile */}
+      <div className="flex-1 relative overflow-hidden">
+        <div
+          ref={containerRef}
+          onScroll={handleScroll}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain touch-pan-y"
+          style={{ 
+            scrollbarWidth: 'none', 
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+            willChange: 'scroll-position',
+            transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.5, 40)}px)` : 'none',
+            transition: pullDistance === 0 ? 'transform 0.3s ease-out' : 'none',
+          }}
+        >
+          {posts.length === 0 && !loading ? (
+            <div className="flex h-screen items-center justify-center snap-start">
+              <div className="text-center space-y-4 px-6 animate-fade-in">
+                <p className="text-muted-foreground text-lg">
+                  No posts available yet
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Discover amazing content
+                </p>
+                <Button onClick={handleRefresh}>Refresh Feed</Button>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <>
+              {/* Top spacer for virtual scrolling */}
+              {topSpacerHeight > 0 && (
+                <div 
+                  style={{ height: `${topSpacerHeight}px` }}
+                  className="pointer-events-none"
+                  aria-hidden="true"
+                />
+              )}
+              
+              {/* Render only visible posts in window */}
+              {visiblePosts.map((post, visibleIndex) => {
+                const actualIndex = visibleStart + visibleIndex;
+                return (
+                  <div
+                    key={`${post.id}-${actualIndex}`}
+                    ref={actualIndex === posts.length - 8 ? lastPostRef : null}
+                    data-post-index={actualIndex}
+                    className="snap-start snap-always will-change-transform"
+                  >
+                    <PostErrorBoundary postId={post.id}>
+                      <FeedPost
+                        id={post.id}
+                        mediaUrl={post.media_url}
+                        mediaType={post.media_type}
+                        caption={post.caption}
+                        likesCount={post.likes_count}
+                        commentsCount={post.comments_count}
+                        sharesCount={post.shares_count}
+                        isSaved={post.user_saved || false}
+                        isLiked={post.user_liked || false}
+                        isActive={actualIndex === currentIndex}
+                        onLike={() => handleLike(post.id)}
+                        onSaveToggle={() => handleSaveToggle(post.id)}
+                        onDelete={() => handleDeletePost(post.id)}
+                        userId={post.user_id}
+                        profile={post.profile}
+                      />
+                    </PostErrorBoundary>
+                  </div>
+                );
+              })}
+              
+              {/* Bottom spacer for virtual scrolling */}
+              {bottomSpacerHeight > 0 && (
+                <div 
+                  style={{ height: `${bottomSpacerHeight}px` }}
+                  className="pointer-events-none"
+                  aria-hidden="true"
+                />
+              )}
+              {loadingMore && (
+                <div className="flex h-screen items-center justify-center snap-start">
+                  <div className="text-center space-y-4 animate-fade-in">
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="text-muted-foreground">
+                      {posts.length > 50 
+                        ? "Discovering more content..." 
+                        : "Loading more posts..."}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {!loadingMore && posts.length > 0 && (
+                <div className="flex h-screen items-center justify-center snap-start">
+                  <div className="text-center space-y-4 px-6 animate-fade-in">
+                    <p className="text-muted-foreground">Keep scrolling - there's always more!</p>
+                    <Button 
+                      onClick={scrollToTop}
+                      variant="default"
+                      className="touch-manipulation active:scale-95"
+                    >
+                      Back to top
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 };
+
+export default VerticalFeed;

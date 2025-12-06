@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { BottomNav } from "@/components/BottomNav";
 import { UploadButton } from "@/components/UploadButton";
+import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, User, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 type PrivacySettings = {
@@ -21,8 +22,9 @@ type PrivacySettings = {
 
 const Settings = () => {
   const navigate = useNavigate();
-  const [userProfile, setUserProfile] = useState<{ username: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
   const [settings, setSettings] = useState<PrivacySettings>({
     is_private: false,
     who_can_comment: "everyone",
@@ -43,7 +45,7 @@ const Settings = () => {
 
     const { data } = await supabase
       .from("profiles")
-      .select("username")
+      .select("*")
       .eq("id", user.id)
       .single();
 
@@ -106,6 +108,17 @@ const Settings = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success("Logged out successfully");
+      navigate("/auth");
+    } catch (error) {
+      console.error("Error logging out:", error);
+      toast.error("Failed to log out");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -133,6 +146,26 @@ const Settings = () => {
           </div>
 
           <div className="p-4 space-y-4">
+            {/* Account Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Account</CardTitle>
+                <CardDescription>
+                  Manage your profile and account information
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start"
+                  onClick={() => setShowEditProfile(true)}
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </CardContent>
+            </Card>
+
             {/* Privacy Settings */}
             <Card>
               <CardHeader>
@@ -227,9 +260,39 @@ const Settings = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Logout */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Session</CardTitle>
+                <CardDescription>
+                  Sign out of your account
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="destructive" 
+                  className="w-full justify-start"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Log Out
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
           {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
+          
+          {userProfile && (
+            <EditProfileDialog
+              open={showEditProfile}
+              onOpenChange={setShowEditProfile}
+              profile={userProfile}
+              onProfileUpdate={fetchUserProfile}
+            />
+          )}
+
           <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
         </div>
       </div>
