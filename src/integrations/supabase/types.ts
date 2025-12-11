@@ -905,7 +905,12 @@ export type Database = {
       }
       get_simple_feed:
         | {
-            Args: { p_limit?: number; p_offset?: number; p_user_id: string }
+            Args: {
+              p_feed_type?: string
+              p_limit?: number
+              p_offset?: number
+              p_user_id: string
+            }
             Returns: {
               avatar_url: string
               bio: string
@@ -929,12 +934,7 @@ export type Database = {
             }[]
           }
         | {
-            Args: {
-              p_feed_type?: string
-              p_limit?: number
-              p_offset?: number
-              p_user_id: string
-            }
+            Args: { p_limit?: number; p_offset?: number; p_user_id: string }
             Returns: {
               avatar_url: string
               bio: string
