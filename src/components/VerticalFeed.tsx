@@ -45,6 +45,9 @@ export const VerticalFeed = () => {
   const touchStartYRef = useRef<number>(0);
   const isAtTopRef = useRef<boolean>(false);
   const currentIndexRef = useRef<number>(0);
+  const swipeStartYRef = useRef<number>(0);
+  const swipeStartTimeRef = useRef<number>(0);
+  const isSwipingRef = useRef<boolean>(false);
   
   // Virtual scrolling settings - CRITICAL for memory management
   const WINDOW_SIZE = 10; // Render 10 posts in window (5 above + current + 4 below)
@@ -376,50 +379,94 @@ export const VerticalFeed = () => {
     }
   };
 
-  // Pull-to-refresh handlers - only activates at top
+  // Scroll to specific post by index
+  const scrollToPost = useCallback((index: number) => {
+    if (!containerRef.current || index < 0 || index >= posts.length) return;
+    
+    const targetScroll = index * postHeight;
+    containerRef.current.scrollTo({
+      top: targetScroll,
+      behavior: 'smooth'
+    });
+  }, [posts.length, postHeight]);
+
+  // Pull-to-refresh + swipe navigation handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!containerRef.current) return;
     
+    const touchY = e.touches[0].clientY;
     const isAtTop = containerRef.current.scrollTop <= 1;
     isAtTopRef.current = isAtTop;
     
+    // Pull-to-refresh tracking
     if (isAtTop) {
-      touchStartYRef.current = e.touches[0].clientY;
+      touchStartYRef.current = touchY;
     }
+    
+    // Swipe navigation tracking
+    swipeStartYRef.current = touchY;
+    swipeStartTimeRef.current = Date.now();
+    isSwipingRef.current = true;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!containerRef.current || !isAtTopRef.current) return;
+    if (!containerRef.current) return;
     
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartYRef.current;
-    
-    // Only track downward pulls when at top
-    if (diff > 0 && containerRef.current.scrollTop <= 1) {
-      // Apply resistance for natural feel
-      const resistance = 0.4;
-      const maxPull = 120;
-      const distance = Math.min(diff * resistance, maxPull);
+    // Pull-to-refresh logic
+    if (isAtTopRef.current) {
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - touchStartYRef.current;
       
-      setPullDistance(distance);
-      // Removed e.preventDefault() to allow normal mobile scrolling
-    } else {
-      setPullDistance(0);
-      isAtTopRef.current = false;
+      if (diff > 0 && containerRef.current.scrollTop <= 1) {
+        const resistance = 0.4;
+        const maxPull = 120;
+        const distance = Math.min(diff * resistance, maxPull);
+        setPullDistance(distance);
+      } else {
+        setPullDistance(0);
+        isAtTopRef.current = false;
+      }
     }
   };
 
-  const handleTouchEnd = async () => {
+  const handleTouchEnd = async (e: React.TouchEvent) => {
+    // Pull-to-refresh check
     const threshold = 60;
-    
     if (pullDistance >= threshold && !isRefreshing) {
       await handleRefresh();
     }
-    
-    // Reset
     setPullDistance(0);
     touchStartYRef.current = 0;
     isAtTopRef.current = false;
+    
+    // Swipe navigation detection
+    if (!isSwipingRef.current || !containerRef.current) {
+      isSwipingRef.current = false;
+      return;
+    }
+    
+    const touchEndY = e.changedTouches[0]?.clientY ?? swipeStartYRef.current;
+    const swipeDistance = swipeStartYRef.current - touchEndY;
+    const swipeDuration = Date.now() - swipeStartTimeRef.current;
+    
+    // Velocity-based swipe detection (fast swipe = navigate)
+    const velocity = Math.abs(swipeDistance) / swipeDuration;
+    const minSwipeDistance = 50; // Minimum distance in pixels
+    const minVelocity = 0.3; // Minimum velocity (px/ms)
+    
+    if (Math.abs(swipeDistance) > minSwipeDistance && velocity > minVelocity) {
+      if (swipeDistance > 0) {
+        // Swipe up -> next post
+        const nextIndex = Math.min(currentIndexRef.current + 1, posts.length - 1);
+        scrollToPost(nextIndex);
+      } else {
+        // Swipe down -> previous post
+        const prevIndex = Math.max(currentIndexRef.current - 1, 0);
+        scrollToPost(prevIndex);
+      }
+    }
+    
+    isSwipingRef.current = false;
   };
 
 
