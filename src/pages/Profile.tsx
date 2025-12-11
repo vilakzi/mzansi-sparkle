@@ -351,11 +351,12 @@ const Profile = () => {
                       ) : (
                         <>
                           <UserPlus className="h-4 w-4 mr-1" />
-                          Follow
+                      Follow
                         </>
                       )}
                     </Button>
-                    {profile.whatsapp_number && (
+                    {/* WhatsApp button only visible to followers for privacy */}
+                    {isFollowing && profile.whatsapp_number && (
                       <WhatsAppButton
                         phoneNumber={profile.whatsapp_number}
                         displayName={profile.display_name}

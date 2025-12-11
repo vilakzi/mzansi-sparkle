@@ -983,6 +983,10 @@ export type Database = {
         Args: { target_id: string; viewer_id: string }
         Returns: boolean
       }
+      is_following: {
+        Args: { follower: string; following: string }
+        Returns: boolean
+      }
       mark_conversation_as_read: {
         Args: { p_conversation_id: string }
         Returns: undefined
