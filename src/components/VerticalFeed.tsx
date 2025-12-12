@@ -7,6 +7,7 @@ import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 import { RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { prefetchVideos } from "@/lib/pwaUtils";
+import { useVideoPreloader } from "@/hooks/useVideoPreloader";
 
 interface Post {
   id: string;
@@ -143,26 +144,17 @@ export const VerticalFeed = () => {
     return () => postDetectionObserverRef.current?.disconnect();
   }, [posts, visibleStart, visibleEnd]);
 
-  // Smart video preloading
+  // Enhanced video preloading for next 2 posts
+  useVideoPreloader({
+    posts: posts.map(p => ({ id: p.id, media_url: p.media_url, media_type: p.media_type })),
+    currentIndex,
+    preloadCount: PRELOAD_COUNT,
+  });
+
+  // Auto-pause distant videos to save resources
   useEffect(() => {
     if (!containerRef.current || posts.length === 0) return;
 
-    const preloadDistance = 2;
-    const preloadStart = Math.max(0, currentIndex - preloadDistance);
-    const preloadEnd = Math.min(posts.length - 1, currentIndex + preloadDistance);
-
-    for (let i = preloadStart; i <= preloadEnd; i++) {
-      const post = posts[i];
-      if (post.media_type !== 'video') continue;
-      
-      const postElement = containerRef.current.querySelector(`[data-post-index="${i}"]`);
-      if (postElement) {
-        const video = postElement.querySelector('video');
-        if (video && video.readyState < 2) video.load();
-      }
-    }
-
-    // Auto-pause distant videos
     posts.forEach((post, index) => {
       if (post.media_type !== 'video') return;
       
@@ -171,7 +163,9 @@ export const VerticalFeed = () => {
       if (!video) return;
 
       const distance = Math.abs(index - currentIndex);
-      if (distance > preloadDistance && !video.paused) video.pause();
+      // Pause videos more than 2 positions away
+      if (distance > 2 && !video.paused) video.pause();
+      // Ensure only current video plays
       if (index !== currentIndex && !video.paused) video.pause();
     });
   }, [currentIndex, posts]);
