@@ -436,6 +436,7 @@ export const FeedPost = ({
                   loop
                   playsInline
                   muted={isMuted}
+                  autoPlay={isActive}
                   preload="auto"
                   onClick={handleVideoClick}
                 />
