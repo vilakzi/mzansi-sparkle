@@ -81,113 +81,72 @@ export const FeedPost = ({
   } | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasAutoRetried, setHasAutoRetried] = useState(false);
+  const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16); // Default to vertical
   
-  const MAX_RETRIES = 1; // Reduced for faster error detection
+  const MAX_RETRIES = 1;
 
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Enhanced media error handling with detailed logging
+  // Enhanced media error handling
   const handleMediaError = () => {
     const video = videoRef.current;
     if (!video) return;
 
     const error = video.error;
-    const errorDetails = {
-      code: error?.code,
-      message: error?.message,
-      mediaUrl,
-      expectedUrl: mediaUrl,
-      actualSrc: video.src,
-      postId: id,
-      retryAttempt: retryCount + 1,
-    };
+    console.error('[FeedPost] Video loading error:', { postId: id, error: error?.message });
 
-    console.error('[FeedPost] Video loading error:', errorDetails);
-    console.error('[FeedPost] Video error object:', error);
-    console.error('[FeedPost] Video source:', video.src);
-    console.error('[FeedPost] Expected URL:', mediaUrl);
-    console.error('[FeedPost] URL mismatch:', video.src !== mediaUrl);
-    console.error('[FeedPost] Video ready state:', video.readyState);
-    console.error('[FeedPost] Video network state:', video.networkState);
-
-    // Use simple navigator.onLine check
     const isOnline = navigator.onLine;
-
     let errorType = 'Unknown Error';
     let errorMessage = 'Unable to load video. Please try again.';
     let isNetworkError = false;
 
-    // Categorize error based on error code
     if (!isOnline) {
       errorType = 'Network Error';
-      errorMessage = 'No internet connection. Please check your network and try again.';
+      errorMessage = 'No internet connection. Please check your network.';
       isNetworkError = true;
-      console.error('[FeedPost] Network is offline');
     } else if (error) {
       switch (error.code) {
         case MediaError.MEDIA_ERR_ABORTED:
           errorType = 'Playback Aborted';
-          errorMessage = 'Video playback was aborted. Please try again.';
-          console.error('[FeedPost] Media error: Playback aborted by user');
+          errorMessage = 'Video playback was aborted.';
           break;
         case MediaError.MEDIA_ERR_NETWORK:
           errorType = 'Network Error';
-          errorMessage = 'Network error while loading video. Please check your connection.';
+          errorMessage = 'Network error while loading video.';
           isNetworkError = true;
-          console.error('[FeedPost] Media error: Network error during download');
           break;
         case MediaError.MEDIA_ERR_DECODE:
           errorType = 'Decode Error';
-          errorMessage = 'Video format not supported or file is corrupted.';
-          console.error('[FeedPost] Media error: Decode error (corrupted or unsupported format)');
+          errorMessage = 'Video format not supported.';
           break;
         case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-          errorType = 'Source Not Supported';
-          errorMessage = 'Video source not found or format not supported.';
-          console.error('[FeedPost] Media error: Source not supported or not found (404/CORS)');
+          errorType = 'Source Not Found';
+          errorMessage = 'Video not available.';
           break;
-        default:
-          console.error('[FeedPost] Media error: Unknown error code', error.code);
       }
     }
 
-    // Retry logic with quick retry
     if (retryCount < MAX_RETRIES && isOnline) {
-      const delay = 1000; // Quick 1 second retry
-      console.log(`[FeedPost] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
       setRetryCount(prev => prev + 1);
-      
       setTimeout(() => {
-        console.log('[FeedPost] Attempting to reload video...');
-        if (videoRef.current) {
-          videoRef.current.load();
-        }
-      }, delay);
+        if (videoRef.current) videoRef.current.load();
+      }, 1000);
     } else {
-      console.error('[FeedPost] Max retries reached or offline, showing error state');
-      setMediaError({
-        type: errorType,
-        message: errorMessage,
-        isNetworkError,
-      });
+      setMediaError({ type: errorType, message: errorMessage, isNetworkError });
       
-      // Auto-retry once after 2 seconds, then show persistent error
       if (!hasAutoRetried && isOnline) {
         setTimeout(() => {
-          console.log('[FeedPost] Auto-dismissing error and performing final retry...');
           setHasAutoRetried(true);
           setMediaError(null);
           setRetryCount(0);
-          if (videoRef.current) {
-            videoRef.current.load();
-          }
+          if (videoRef.current) videoRef.current.load();
         }, 2000);
       }
     }
   };
 
-  // Handle buffering and loading states
+  // Handle buffering states
   useEffect(() => {
     const video = videoRef.current;
     if (!video || mediaType !== 'video') return;
@@ -195,23 +154,32 @@ export const FeedPost = ({
     const handleWaiting = () => setIsBuffering(true);
     const handleCanPlay = () => setIsBuffering(false);
     const handleError = () => handleMediaError();
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+      // Calculate aspect ratio for proper display
+      if (video.videoWidth && video.videoHeight) {
+        setVideoAspectRatio(video.videoWidth / video.videoHeight);
+      }
+    };
 
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('error', handleError);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
 
     return () => {
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
   }, [mediaType, retryCount]);
 
-  // Aggressive preload for smooth scrolling
+  // Preload video
   useEffect(() => {
     if (mediaType === 'video' && !preloadedRef.current && videoRef.current) {
       videoRef.current.preload = 'auto';
-      videoRef.current.load(); // Force load immediately
+      videoRef.current.load();
       preloadedRef.current = true;
     }
   }, [mediaType]);
@@ -224,12 +192,10 @@ export const FeedPost = ({
     getCurrentUser();
   }, []);
 
-  // Handle initial video play on mount
+  // Handle initial video play
   useEffect(() => {
     if (videoRef.current && mediaType === "video" && isActive && !hasInitializedRef.current) {
-      videoRef.current.play().catch(() => {
-        // Ignore autoplay errors
-      });
+      videoRef.current.play().catch(() => {});
       setIsPlaying(true);
       hasInitializedRef.current = true;
     }
@@ -240,9 +206,7 @@ export const FeedPost = ({
     if (!videoRef.current || mediaType !== "video") return;
     
     if (isActive) {
-      videoRef.current.play().catch(() => {
-        // Ignore autoplay errors  
-      });
+      videoRef.current.play().catch(() => {});
       setIsPlaying(true);
     } else {
       videoRef.current.pause();
@@ -262,17 +226,8 @@ export const FeedPost = ({
       }
     };
 
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration);
-    };
-
     video.addEventListener('timeupdate', updateProgress);
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    
-    return () => {
-      video.removeEventListener('timeupdate', updateProgress);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-    };
+    return () => video.removeEventListener('timeupdate', updateProgress);
   }, [isScrubbing]);
 
   const handleVideoClick = () => {
@@ -280,12 +235,10 @@ export const FeedPost = ({
     const timeSinceLastTap = now - lastTapRef.current;
 
     if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-      // Double tap - like
       handleLike();
       setShowHeart(true);
       setTimeout(() => setShowHeart(false), 1000);
     } else {
-      // Single tap - play/pause
       if (videoRef.current) {
         if (isPlaying) {
           videoRef.current.pause();
@@ -296,7 +249,6 @@ export const FeedPost = ({
         }
       }
     }
-
     lastTapRef.current = now;
   };
 
@@ -358,7 +310,6 @@ export const FeedPost = ({
 
   const handleSeekBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    e.preventDefault();
     
     if (videoRef.current) {
       wasPlayingRef.current = !videoRef.current.paused;
@@ -381,8 +332,6 @@ export const FeedPost = ({
 
   const handleSeekBarTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    e.preventDefault();
-    
     if (!isScrubbing) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
@@ -399,20 +348,10 @@ export const FeedPost = ({
 
   const handleSeekBarTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    e.preventDefault();
     setIsScrubbing(false);
     if (videoRef.current && wasPlayingRef.current) {
       videoRef.current.play();
       setIsPlaying(true);
-    }
-  };
-
-  const seekToPercentage = (percentage: number) => {
-    if (videoRef.current) {
-      const newTime = percentage * videoRef.current.duration;
-      videoRef.current.currentTime = newTime;
-      setProgress(percentage * 100);
-      setCurrentTime(newTime);
     }
   };
 
@@ -429,11 +368,10 @@ export const FeedPost = ({
   const renderCaption = () => {
     if (!caption) return null;
 
-    // Split caption by hashtags and render them as clickable
     const parts = caption.split(/(#[a-zA-Z0-9_]+)/g);
     
     return (
-      <p className="mb-4 text-white text-lg font-medium pointer-events-auto">
+      <p className="mb-3 text-foreground text-base font-medium pointer-events-auto line-clamp-2">
         {parts.map((part, index) => {
           if (part.startsWith("#")) {
             const hashtagName = part.substring(1);
@@ -456,235 +394,217 @@ export const FeedPost = ({
     );
   };
 
+  // Determine if video is vertical or horizontal
+  const isVerticalVideo = videoAspectRatio < 1;
+
   return (
-    <div className="relative h-screen w-full snap-start snap-always will-change-transform touch-none">
-      {mediaType === "video" ? (
-        <div className="relative h-full w-full">
-          {mediaError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-6 space-y-4">
-              <div className="text-center space-y-2">
-                <p className="text-lg font-semibold text-red-400">{mediaError.type}</p>
-                <p className="text-sm text-gray-300">{mediaError.message}</p>
-                {mediaError.isNetworkError && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Check your internet connection and try again
-                  </p>
-                )}
+    <div className="relative h-[calc(100vh-4rem)] w-full snap-start snap-always bg-background flex items-center justify-center overflow-hidden">
+      {/* Media container with proper aspect ratio handling */}
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
+        {mediaType === "video" ? (
+          <>
+            {mediaError ? (
+              <div className="flex flex-col items-center justify-center text-foreground p-6 space-y-4">
+                <div className="text-center space-y-2">
+                  <p className="text-lg font-semibold text-destructive">{mediaError.type}</p>
+                  <p className="text-sm text-muted-foreground">{mediaError.message}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setMediaError(null);
+                    setRetryCount(0);
+                    setHasAutoRetried(false);
+                    if (videoRef.current) videoRef.current.load();
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  console.log('[FeedPost] Manual retry initiated by user');
-                  setMediaError(null);
-                  setRetryCount(0);
-                  setHasAutoRetried(false); // Reset auto-retry flag for manual retry
-                  if (videoRef.current) videoRef.current.load();
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="absolute inset-0 pointer-events-none touch-auto" onClick={handleVideoClick}>
-                <div className="w-full h-full pointer-events-auto" />
-              </div>
-              <video
-                ref={videoRef}
-                src={mediaUrl}
-                className="h-full w-full object-cover pointer-events-none will-change-transform"
-                loop
-                playsInline
-                muted={isMuted}
-                preload="auto"
-              />
-
-              {/* Buffering indicator - subtle overlay */}
-              {isBuffering && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-none">
-                  <div className="bg-black/60 rounded-full p-3 shadow-lg">
-                    <RefreshCw className="h-6 w-6 text-white animate-spin" />
-                  </div>
-                </div>
-              )}
-
-              {/* Play/Pause indicator */}
-              {!isPlaying && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="bg-black/50 rounded-full p-4">
-                    <Play className="h-16 w-16 text-white" fill="white" />
-                  </div>
-                </div>
-              )}
-
-              {/* Double tap heart animation */}
-              {showHeart && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <Heart 
-                    className="h-32 w-32 text-red-500 animate-ping" 
-                    fill="red"
-                  />
-                </div>
-              )}
-
-              {/* Volume control */}
-              <button
-                onClick={toggleMute}
-                className="absolute top-6 right-16 bg-black/50 rounded-full p-3 text-white transition-transform active:scale-90 z-10 pointer-events-auto"
-              >
-                {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
-              </button>
-
-              {/* More options menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-6 right-6 bg-black/50 rounded-full text-white hover:bg-black/70 z-10 pointer-events-auto"
-                  >
-                    <MoreVertical className="h-6 w-6" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-[100] bg-background">
-                  {currentUserId === userId && onDelete && (
-                    <DropdownMenuItem 
-                      onClick={onDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Post
-                    </DropdownMenuItem>
+            ) : (
+              <>
+                <video
+                  ref={videoRef}
+                  src={mediaUrl}
+                  className={cn(
+                    "max-h-full max-w-full will-change-transform",
+                    isVerticalVideo ? "h-full w-auto" : "w-full h-auto"
                   )}
-                  <DropdownMenuItem onClick={() => setShowReport(true)}>
-                    <Flag className="h-4 w-4 mr-2" />
-                    Report Post
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          )}
-        </div>
-      ) : (
-        <img
-          src={mediaUrl}
-          alt="Post"
-          className="h-full w-full object-cover"
-          loading="lazy"
-          decoding="async"
-        />
-      )}
+                  style={{ objectFit: 'contain' }}
+                  loop
+                  playsInline
+                  muted={isMuted}
+                  preload="auto"
+                  onClick={handleVideoClick}
+                />
+
+                {/* Buffering indicator */}
+                {isBuffering && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                    <div className="bg-black/60 rounded-full p-3">
+                      <RefreshCw className="h-6 w-6 text-foreground animate-spin" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Play/Pause indicator */}
+                {!isPlaying && !isBuffering && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-black/50 rounded-full p-4">
+                      <Play className="h-16 w-16 text-foreground" fill="white" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Double tap heart animation */}
+                {showHeart && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <Heart className="h-32 w-32 text-destructive animate-ping" fill="currentColor" />
+                  </div>
+                )}
+
+                {/* Volume control */}
+                <button
+                  onClick={toggleMute}
+                  className="absolute top-4 right-14 bg-black/50 rounded-full p-2.5 text-foreground transition-transform active:scale-90 z-10"
+                >
+                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
+
+                {/* More options menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-4 right-4 bg-black/50 rounded-full text-foreground hover:bg-black/70 z-10 h-10 w-10"
+                    >
+                      <MoreVertical className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="z-[100]">
+                    {currentUserId === userId && onDelete && (
+                      <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Post
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => setShowReport(true)}>
+                      <Flag className="h-4 w-4 mr-2" />
+                      Report Post
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+          </>
+        ) : (
+          <img
+            src={mediaUrl}
+            alt="Post"
+            className="max-h-full max-w-full object-contain"
+            loading="lazy"
+            decoding="async"
+          />
+        )}
+      </div>
       
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 pb-32 pointer-events-none z-10">
+      {/* Bottom overlay with user info and actions */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 pb-6 pointer-events-none z-10">
+        {/* User info */}
         {profile && (
-          <div className="mb-4 pointer-events-auto">
+          <div className="flex items-center gap-3 mb-3 pointer-events-auto">
             <Avatar 
-              className="h-12 w-12 border-2 border-white cursor-pointer transition-transform active:scale-90"
+              className="h-10 w-10 border-2 border-foreground/20 cursor-pointer transition-transform active:scale-95"
               onClick={() => navigate(`/profile/${profile.username}`)}
             >
               <AvatarImage src={profile.avatar_url || undefined} />
-              <AvatarFallback className="bg-primary text-primary-foreground">
+              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                 {profile.display_name[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
+            <div 
+              className="cursor-pointer"
+              onClick={() => navigate(`/profile/${profile.username}`)}
+            >
+              <p className="text-foreground font-semibold text-sm">{profile.display_name}</p>
+              <p className="text-muted-foreground text-xs">@{profile.username}</p>
+            </div>
           </div>
         )}
         
-        
         {renderCaption()}
         
-        <div className="flex items-center justify-between mb-2 pointer-events-auto">
-          <div className="flex items-center gap-6">
+        {/* Action buttons */}
+        <div className="flex items-center justify-between pointer-events-auto">
+          <div className="flex items-center gap-5">
             <button
               onClick={handleLike}
-              className="flex items-center gap-2 text-white transition-transform active:scale-90"
+              className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
             >
-              <Heart
-                className={cn(
-                  "h-8 w-8",
-                  isLiked && "fill-red-500 text-red-500"
-                )}
-              />
-              <span className="text-lg font-semibold">{likesCount}</span>
+              <Heart className={cn("h-7 w-7", isLiked && "fill-destructive text-destructive")} />
+              <span className="text-sm font-medium">{likesCount}</span>
             </button>
             
             <button
               onClick={() => setShowComments(true)}
-              className="flex items-center gap-2 text-white transition-transform active:scale-90"
+              className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
             >
-              <MessageCircle className="h-8 w-8" />
-              <span className="text-lg font-semibold">{commentsCount}</span>
+              <MessageCircle className="h-7 w-7" />
+              <span className="text-sm font-medium">{commentsCount}</span>
             </button>
             
             <button
               onClick={() => setShowShare(true)}
-              className="flex items-center gap-2 text-white transition-transform active:scale-90"
+              className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
             >
-              <Share2 className="h-8 w-8" />
-              <span className="text-lg font-semibold">{sharesCount}</span>
+              <Share2 className="h-7 w-7" />
+              <span className="text-sm font-medium">{sharesCount}</span>
             </button>
           </div>
           
           <button
             onClick={onSaveToggle}
-            className="text-white transition-transform active:scale-90"
+            className="text-foreground transition-transform active:scale-90"
           >
-            <Bookmark
-              className={cn(
-                "h-8 w-8",
-                isSaved && "fill-white"
-              )}
-            />
+            <Bookmark className={cn("h-7 w-7", isSaved && "fill-foreground")} />
           </button>
         </div>
       </div>
 
-      {/* Interactive seekbar - positioned after gradient to ensure visibility */}
-      {mediaType === 'video' && (
-        <div className="absolute bottom-24 left-0 right-0 px-4 z-[70] pointer-events-auto">
-          <div className="flex items-center gap-2 text-white text-xs mb-1">
-            <span>{formatTime(currentTime)}</span>
-            <span>/</span>
-            <span>{formatTime(duration)}</span>
+      {/* Video seekbar */}
+      {mediaType === 'video' && !mediaError && (
+        <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
+          <div className="flex items-center gap-2 text-foreground text-xs mb-1.5">
+            <span className="tabular-nums">{formatTime(currentTime)}</span>
+            <span className="text-muted-foreground">/</span>
+            <span className="tabular-nums text-muted-foreground">{formatTime(duration)}</span>
           </div>
           <div 
-            className="relative h-1 bg-white/30 rounded-full cursor-pointer group py-3"
+            className="relative h-1 bg-foreground/30 rounded-full cursor-pointer group py-2.5"
             onMouseDown={handleSeekBarMouseDown}
             onTouchStart={handleSeekBarTouch}
             onTouchMove={handleSeekBarTouchMove}
             onTouchEnd={handleSeekBarTouchEnd}
           >
+            <div className="absolute top-1/2 -translate-y-1/2 h-1 w-full bg-foreground/30 rounded-full" />
             <div 
-              className="h-1 bg-white rounded-full transition-all duration-100"
+              className="absolute top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full transition-all"
               style={{ width: `${progress}%` }}
             />
             <div 
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-foreground rounded-full shadow-lg"
               style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
             />
           </div>
         </div>
       )}
       
-      <CommentSheet
-        postId={id} 
-        isOpen={showComments} 
-        onClose={() => setShowComments(false)} 
-      />
-      
-      <ShareSheet
-        postId={id}
-        isOpen={showShare}
-        onClose={() => setShowShare(false)}
-      />
-
-      <ReportDialog
-        isOpen={showReport}
-        onClose={() => setShowReport(false)}
-        postId={id}
-      />
+      <CommentSheet postId={id} isOpen={showComments} onClose={() => setShowComments(false)} />
+      <ShareSheet postId={id} isOpen={showShare} onClose={() => setShowShare(false)} />
+      <ReportDialog isOpen={showReport} onClose={() => setShowReport(false)} postId={id} />
     </div>
   );
 };

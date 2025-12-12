@@ -49,27 +49,34 @@ export const VerticalFeed = () => {
   const swipeStartTimeRef = useRef<number>(0);
   const isSwipingRef = useRef<boolean>(false);
   
-  // Virtual scrolling settings - CRITICAL for memory management
-  const WINDOW_SIZE = 10; // Render 10 posts in window (5 above + current + 4 below)
-  const PRELOAD_COUNT = 2; // Preload 2 videos ahead
-  const LOAD_TRIGGER = 8; // Load more when 8 posts remaining
+  // Virtual scrolling settings
+  const WINDOW_SIZE = 10;
+  const PRELOAD_COUNT = 2;
+  const LOAD_TRIGGER = 8;
   
-  // Calculate visible window of posts for virtual scrolling
+  // Dynamic post height (viewport height minus bottom nav)
+  const getPostHeight = () => typeof window !== 'undefined' ? window.innerHeight - 64 : 736;
+  const [postHeight, setPostHeight] = useState(getPostHeight);
+  
+  // Update height on resize
+  useEffect(() => {
+    const handleResize = () => setPostHeight(getPostHeight());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Calculate visible window
   const visibleStart = Math.max(0, windowStart);
   const visibleEnd = Math.min(posts.length, windowStart + WINDOW_SIZE);
   const visiblePosts = posts.slice(visibleStart, visibleEnd);
   
-  // Virtual scrolling: calculate spacer heights to maintain scroll position
-  const postHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
   const topSpacerHeight = visibleStart * postHeight;
   const bottomSpacerHeight = Math.max(0, (posts.length - visibleEnd) * postHeight);
 
   useEffect(() => {
     const initializeUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUserId(session.user.id);
-      }
+      if (session?.user) setUserId(session.user.id);
     };
     initializeUser();
   }, []);
@@ -78,13 +85,11 @@ export const VerticalFeed = () => {
     if (userId) {
       fetchPosts();
       const cleanup = setupRealtimeSubscription();
-      return cleanup;
+      return () => { cleanup(); };
     }
   }, [userId]);
 
-
   useEffect(() => {
-    // Setup intersection observer for infinite scroll
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingMore && !loading) {
@@ -98,30 +103,18 @@ export const VerticalFeed = () => {
       observerRef.current.observe(lastPostRef.current);
     }
 
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
+    return () => observerRef.current?.disconnect();
   }, [loadingMore, loading, posts.length]);
 
-  // Keep currentIndexRef in sync with currentIndex
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
 
-  // IntersectionObserver for accurate post detection (works with variable heights)
+  // IntersectionObserver for accurate post detection
   useEffect(() => {
     if (!containerRef.current || posts.length === 0) return;
 
-    const observerOptions = {
-      root: containerRef.current,
-      threshold: [0, 0.25, 0.5, 0.75, 1], // Multiple thresholds for smooth tracking
-      rootMargin: '0px'
-    };
-
     postDetectionObserverRef.current = new IntersectionObserver((entries) => {
-      // Find the most visible post (highest intersection ratio)
       let maxRatio = 0;
       let mostVisibleIndex = currentIndexRef.current;
 
@@ -129,55 +122,35 @@ export const VerticalFeed = () => {
         if (entry.intersectionRatio > maxRatio) {
           maxRatio = entry.intersectionRatio;
           const indexAttr = entry.target.getAttribute('data-post-index');
-          if (indexAttr) {
-            mostVisibleIndex = parseInt(indexAttr, 10);
-          }
+          if (indexAttr) mostVisibleIndex = parseInt(indexAttr, 10);
         }
       });
 
-      // Update only if we found a more visible post (>50% visible)
       if (maxRatio >= 0.5 && mostVisibleIndex !== currentIndexRef.current) {
         setCurrentIndex(mostVisibleIndex);
-        
-        // Update window for virtualization
-        const newWindowStart = Math.max(0, mostVisibleIndex - Math.floor(WINDOW_SIZE / 2));
-        setWindowStart(newWindowStart);
-        
-        // Track view
-        if (posts[mostVisibleIndex]) {
-          trackView(posts[mostVisibleIndex].id);
-        }
-        
-        console.log(`[VerticalFeed] Post ${mostVisibleIndex} is now active (${Math.round(maxRatio * 100)}% visible)`);
+        setWindowStart(Math.max(0, mostVisibleIndex - Math.floor(WINDOW_SIZE / 2)));
+        if (posts[mostVisibleIndex]) trackView(posts[mostVisibleIndex].id);
       }
-    }, observerOptions);
-
-    // Observe all visible post elements in the virtual window
-    const postElements = containerRef.current.querySelectorAll('[data-post-index]');
-    postElements.forEach((el) => {
-      if (postDetectionObserverRef.current) {
-        postDetectionObserverRef.current.observe(el);
-      }
+    }, {
+      root: containerRef.current,
+      threshold: [0, 0.25, 0.5, 0.75, 1],
+      rootMargin: '0px'
     });
 
-    return () => {
-      if (postDetectionObserverRef.current) {
-        postDetectionObserverRef.current.disconnect();
-      }
-    };
-  }, [posts, visibleStart, visibleEnd, WINDOW_SIZE]);
+    const postElements = containerRef.current.querySelectorAll('[data-post-index]');
+    postElements.forEach((el) => postDetectionObserverRef.current?.observe(el));
 
-  // Smart video preloading - only preload within 2 positions of current view
+    return () => postDetectionObserverRef.current?.disconnect();
+  }, [posts, visibleStart, visibleEnd]);
+
+  // Smart video preloading
   useEffect(() => {
     if (!containerRef.current || posts.length === 0) return;
 
-    const preloadDistance = 2; // Preload videos within 2 positions (before and after)
-    
-    // Calculate preload range: 2 behind and 2 ahead
+    const preloadDistance = 2;
     const preloadStart = Math.max(0, currentIndex - preloadDistance);
     const preloadEnd = Math.min(posts.length - 1, currentIndex + preloadDistance);
 
-    // Smart preload: only load videos in the narrow window around current post
     for (let i = preloadStart; i <= preloadEnd; i++) {
       const post = posts[i];
       if (post.media_type !== 'video') continue;
@@ -185,48 +158,29 @@ export const VerticalFeed = () => {
       const postElement = containerRef.current.querySelector(`[data-post-index="${i}"]`);
       if (postElement) {
         const video = postElement.querySelector('video');
-        if (video && video.readyState < 2) {
-          // Only preload if within the smart distance
-          video.load();
-          console.log(`[VerticalFeed] Preloading video ${i} (distance from current: ${Math.abs(i - currentIndex)})`);
-        }
+        if (video && video.readyState < 2) video.load();
       }
     }
 
-    // Auto-pause videos outside the preload window to save bandwidth
+    // Auto-pause distant videos
     posts.forEach((post, index) => {
       if (post.media_type !== 'video') return;
       
       const postElement = containerRef.current?.querySelector(`[data-post-index="${index}"]`);
-      if (!postElement) return;
-      
-      const video = postElement.querySelector('video');
+      const video = postElement?.querySelector('video');
       if (!video) return;
 
-      const distanceFromCurrent = Math.abs(index - currentIndex);
-      
-      // Pause videos outside the 2-position window
-      if (distanceFromCurrent > preloadDistance && !video.paused) {
-        video.pause();
-        console.log(`[VerticalFeed] Auto-paused video ${index} (distance: ${distanceFromCurrent})`);
-      }
-      
-      // Ensure non-active videos are paused
-      if (index !== currentIndex && !video.paused) {
-        video.pause();
-      }
+      const distance = Math.abs(index - currentIndex);
+      if (distance > preloadDistance && !video.paused) video.pause();
+      if (index !== currentIndex && !video.paused) video.pause();
     });
   }, [currentIndex, posts]);
 
   const fetchPosts = async (cursor?: string, isRefresh = false) => {
     try {
-      if (isRefresh) {
-        setIsRefreshing(true);
-      } else if (cursor) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
-      }
+      if (isRefresh) setIsRefreshing(true);
+      else if (cursor) setLoadingMore(true);
+      else setLoading(true);
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
@@ -239,21 +193,11 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      // Simple direct query - specify the relationship explicitly
       const { data: fetchedPosts, error } = await supabase
         .from('posts')
         .select(`
-          id,
-          media_url,
-          media_type,
-          caption,
-          likes_count,
-          comments_count,
-          shares_count,
-          saves_count,
-          views_count,
-          created_at,
-          user_id,
+          id, media_url, media_type, caption, likes_count, comments_count,
+          shares_count, saves_count, views_count, created_at, user_id,
           profiles!posts_user_id_fkey(username, display_name, avatar_url)
         `)
         .order('created_at', { ascending: false })
@@ -261,7 +205,6 @@ export const VerticalFeed = () => {
 
       if (error) throw error;
 
-      // Check if user liked/saved each post
       const postIds = (fetchedPosts || []).map(p => p.id);
       const [likesData, savesData] = await Promise.all([
         supabase.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', session.user.id),
@@ -271,43 +214,30 @@ export const VerticalFeed = () => {
       const likedPostIds = new Set(likesData.data?.map(l => l.post_id) || []);
       const savedPostIds = new Set(savesData.data?.map(s => s.post_id) || []);
 
-      // Map to Post interface with URL validation
-      const postsWithDetails = (fetchedPosts || []).map((post: any) => {
-        // Validate media_url format
-        if (post.media_type === 'video' && !post.media_url?.includes('supabase')) {
-          console.warn('[VerticalFeed] Suspicious video URL detected:', {
-            postId: post.id,
-            mediaUrl: post.media_url,
-            expectedFormat: 'Should contain supabase storage URL'
-          });
+      const postsWithDetails = (fetchedPosts || []).map((post: any) => ({
+        id: post.id,
+        media_url: post.media_url,
+        media_type: post.media_type,
+        caption: post.caption,
+        likes_count: post.likes_count,
+        comments_count: post.comments_count,
+        shares_count: post.shares_count,
+        created_at: post.created_at,
+        user_id: post.user_id,
+        user_liked: likedPostIds.has(post.id),
+        user_saved: savedPostIds.has(post.id),
+        profile: {
+          display_name: post.profiles.display_name,
+          username: post.profiles.username,
+          avatar_url: post.profiles.avatar_url
         }
-        
-        return {
-          id: post.id,
-          media_url: post.media_url,
-          media_type: post.media_type,
-          caption: post.caption,
-          likes_count: post.likes_count,
-          comments_count: post.comments_count,
-          shares_count: post.shares_count,
-          created_at: post.created_at,
-          user_id: post.user_id,
-          user_liked: likedPostIds.has(post.id),
-          user_saved: savedPostIds.has(post.id),
-          profile: {
-            display_name: post.profiles.display_name,
-            username: post.profiles.username,
-            avatar_url: post.profiles.avatar_url
-          }
-        };
-      });
+      }));
 
-      // Smart video prefetching based on network quality
+      // Smart video prefetching
       const connection = (navigator as any).connection;
       const effectiveType = connection?.effectiveType || '4g';
       const isSlowConnection = ['slow-2g', '2g', '3g'].includes(effectiveType);
       
-      // Reduce prefetch on slow networks
       const prefetchLimit = isSlowConnection ? 2 : 3;
       const videoUrls = postsWithDetails
         .filter(post => post.media_type === 'video')
@@ -315,36 +245,22 @@ export const VerticalFeed = () => {
         .map(post => post.media_url);
       
       if (videoUrls.length > 0 && !isSlowConnection) {
-        console.log(`[VerticalFeed] Prefetching ${videoUrls.length} videos (Network: ${effectiveType})`);
-        prefetchVideos(videoUrls).catch(err => 
-          console.warn('[VerticalFeed] Video prefetch failed:', err)
-        );
-      } else if (isSlowConnection) {
-        console.log(`[VerticalFeed] Skipping prefetch on slow network (${effectiveType})`);
+        prefetchVideos(videoUrls).catch(() => {});
       }
 
-      if (isRefresh) {
-        setPosts(postsWithDetails);
-      } else if (cursor) {
-        setPosts((current) => [...current, ...postsWithDetails]);
-      } else {
-        setPosts(postsWithDetails);
-      }
+      if (isRefresh) setPosts(postsWithDetails);
+      else if (cursor) setPosts((current) => [...current, ...postsWithDetails]);
+      else setPosts(postsWithDetails);
 
-      // Check if we have more posts
       setHasMore(fetchedPosts && fetchedPosts.length === BATCH_SIZE);
-      
-      setLoading(false);
-      setLoadingMore(false);
-      setIsRefreshing(false);
     } catch (error: any) {
       console.error('Feed fetch error:', error);
       toast.error("Failed to load posts");
-      
+      setHasMore(false);
+    } finally {
       setLoading(false);
       setLoadingMore(false);
       setIsRefreshing(false);
-      setHasMore(false);
     }
   };
 
@@ -355,42 +271,26 @@ export const VerticalFeed = () => {
 
   const handleRefresh = async () => {
     if (!userId) return;
-    
     setIsRefreshing(true);
-    
     try {
-      // Get timestamp of newest post in current feed
-      const newestPostTime = posts[0]?.created_at;
-      
-      // Just do a full refresh
       await fetchPosts(undefined, true);
       toast.success("Feed refreshed");
     } catch (error) {
-      console.error('Refresh error:', error);
       toast.error("Failed to refresh feed");
     }
-    
     setIsRefreshing(false);
   };
 
   const scrollToTop = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Scroll to specific post by index
   const scrollToPost = useCallback((index: number) => {
     if (!containerRef.current || index < 0 || index >= posts.length) return;
-    
-    const targetScroll = index * postHeight;
-    containerRef.current.scrollTo({
-      top: targetScroll,
-      behavior: 'smooth'
-    });
+    containerRef.current.scrollTo({ top: index * postHeight, behavior: 'smooth' });
   }, [posts.length, postHeight]);
 
-  // Pull-to-refresh + swipe navigation handlers
+  // Touch handlers for pull-to-refresh and swipe
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!containerRef.current) return;
     
@@ -398,12 +298,8 @@ export const VerticalFeed = () => {
     const isAtTop = containerRef.current.scrollTop <= 1;
     isAtTopRef.current = isAtTop;
     
-    // Pull-to-refresh tracking
-    if (isAtTop) {
-      touchStartYRef.current = touchY;
-    }
+    if (isAtTop) touchStartYRef.current = touchY;
     
-    // Swipe navigation tracking
     swipeStartYRef.current = touchY;
     swipeStartTimeRef.current = Date.now();
     isSwipingRef.current = true;
@@ -412,15 +308,12 @@ export const VerticalFeed = () => {
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!containerRef.current) return;
     
-    // Pull-to-refresh logic
     if (isAtTopRef.current) {
       const currentY = e.touches[0].clientY;
       const diff = currentY - touchStartYRef.current;
       
       if (diff > 0 && containerRef.current.scrollTop <= 1) {
-        const resistance = 0.4;
-        const maxPull = 120;
-        const distance = Math.min(diff * resistance, maxPull);
+        const distance = Math.min(diff * 0.4, 120);
         setPullDistance(distance);
       } else {
         setPullDistance(0);
@@ -430,7 +323,6 @@ export const VerticalFeed = () => {
   };
 
   const handleTouchEnd = async (e: React.TouchEvent) => {
-    // Pull-to-refresh check
     const threshold = 60;
     if (pullDistance >= threshold && !isRefreshing) {
       await handleRefresh();
@@ -439,7 +331,6 @@ export const VerticalFeed = () => {
     touchStartYRef.current = 0;
     isAtTopRef.current = false;
     
-    // Swipe navigation detection
     if (!isSwipingRef.current || !containerRef.current) {
       isSwipingRef.current = false;
       return;
@@ -449,61 +340,38 @@ export const VerticalFeed = () => {
     const swipeDistance = swipeStartYRef.current - touchEndY;
     const swipeDuration = Date.now() - swipeStartTimeRef.current;
     
-    // Velocity-based swipe detection (fast swipe = navigate)
     const velocity = Math.abs(swipeDistance) / swipeDuration;
-    const minSwipeDistance = 50; // Minimum distance in pixels
-    const minVelocity = 0.3; // Minimum velocity (px/ms)
+    const minSwipeDistance = 50;
+    const minVelocity = 0.3;
     
     if (Math.abs(swipeDistance) > minSwipeDistance && velocity > minVelocity) {
       if (swipeDistance > 0) {
-        // Swipe up -> next post
-        const nextIndex = Math.min(currentIndexRef.current + 1, posts.length - 1);
-        scrollToPost(nextIndex);
+        scrollToPost(Math.min(currentIndexRef.current + 1, posts.length - 1));
       } else {
-        // Swipe down -> previous post
-        const prevIndex = Math.max(currentIndexRef.current - 1, 0);
-        scrollToPost(prevIndex);
+        scrollToPost(Math.max(currentIndexRef.current - 1, 0));
       }
     }
     
     isSwipingRef.current = false;
   };
 
-
   const setupRealtimeSubscription = () => {
     const channel = supabase
       .channel("posts-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "posts",
-        },
-        async (payload) => {
-          // New post added - could fetch if needed
-        }
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, async () => {})
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   };
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     
-    // Debounce scroll handling
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     
     scrollTimeoutRef.current = setTimeout(() => {
       if (!containerRef.current) return;
       
-      // IntersectionObserver now handles post detection
-      // This only handles load-more trigger
       const postsRemaining = posts.length - currentIndexRef.current;
       if (postsRemaining <= LOAD_TRIGGER && !loadingMore && hasMore) {
         loadMore();
@@ -513,35 +381,21 @@ export const VerticalFeed = () => {
 
   const markPostAsSeen = async (postId: string) => {
     if (!userId) return;
-    
-    // Silently track in background for smart rotation
     try {
       await supabase.from('user_seen_posts').upsert({
         user_id: userId,
         post_id: postId,
         last_seen_at: new Date().toISOString()
       }, { onConflict: 'user_id,post_id' });
-    } catch (error) {
-      // Fail silently
-    }
+    } catch {}
   };
 
   const trackView = async (postId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      await supabase.from("post_views").insert({
-        post_id: postId,
-        user_id: user?.id || null,
-      });
-
-      // Mark post as seen for smart feed rotation
-      if (user?.id) {
-        markPostAsSeen(postId);
-      }
-    } catch (error) {
-      // Silently fail
-    }
+      await supabase.from("post_views").insert({ post_id: postId, user_id: user?.id || null });
+      if (user?.id) markPostAsSeen(postId);
+    } catch {}
   };
 
   const handleLike = async (postId: string) => {
@@ -551,7 +405,6 @@ export const VerticalFeed = () => {
       return;
     }
 
-    // Optimistic UI update - instant feedback!
     const previousPosts = [...posts];
     setPosts((current) =>
       current.map((post) =>
@@ -565,18 +418,10 @@ export const VerticalFeed = () => {
       )
     );
 
-    // Make API call
-    const { error } = await supabase.rpc("toggle_post_like", {
-      p_post_id: postId,
-    });
-
+    const { error } = await supabase.rpc("toggle_post_like", { p_post_id: postId });
     if (error) {
-      // Rollback on error
       setPosts(previousPosts);
       toast.error("Failed to update like");
-      if (import.meta.env.DEV) {
-        console.error(error);
-      }
     }
   };
 
@@ -590,41 +435,24 @@ export const VerticalFeed = () => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
 
-    // Optimistic UI update
     const previousPosts = [...posts];
     setPosts((current) =>
-      current.map((p) =>
-        p.id === postId ? { ...p, user_saved: !p.user_saved } : p
-      )
+      current.map((p) => p.id === postId ? { ...p, user_saved: !p.user_saved } : p)
     );
 
     try {
       if (post.user_saved) {
-        // Unsave
-        const { error } = await supabase
-          .from("saved_posts")
-          .delete()
-          .eq("post_id", postId)
-          .eq("user_id", user.id);
-
+        const { error } = await supabase.from("saved_posts").delete().eq("post_id", postId).eq("user_id", user.id);
         if (error) throw error;
-        toast.success("Post removed from saved");
+        toast.success("Removed from saved");
       } else {
-        // Save
-        const { error } = await supabase
-          .from("saved_posts")
-          .insert({ post_id: postId, user_id: user.id });
-
+        const { error } = await supabase.from("saved_posts").insert({ post_id: postId, user_id: user.id });
         if (error) throw error;
         toast.success("Post saved");
       }
-    } catch (error: any) {
-      // Rollback on error
+    } catch {
       setPosts(previousPosts);
       toast.error("Failed to save post");
-      if (import.meta.env.DEV) {
-        console.error(error);
-      }
     }
   };
 
@@ -632,23 +460,17 @@ export const VerticalFeed = () => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
 
-    // Optimistically remove from UI
     setPosts((current) => current.filter(p => p.id !== postId));
 
-    // Show undo toast
     const undoToastId = toast.success("Post deleted", {
       action: {
         label: "Undo",
         onClick: () => {
-          // Restore post
           setPosts((current) => {
             const newPosts = [...current];
             const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
-            if (insertIndex === -1) {
-              newPosts.push(post);
-            } else {
-              newPosts.splice(insertIndex, 0, post);
-            }
+            if (insertIndex === -1) newPosts.push(post);
+            else newPosts.splice(insertIndex, 0, post);
             return newPosts;
           });
           clearTimeout(deleteTimeoutId);
@@ -657,29 +479,18 @@ export const VerticalFeed = () => {
       duration: 5000,
     });
 
-    // Actual deletion
     const deleteTimeoutId = setTimeout(async () => {
       try {
-        const { error: deleteError } = await supabase.rpc('delete_post_with_media', {
-          p_post_id: postId
-        });
-
-        if (deleteError) throw deleteError;
-
-        // Delete from storage
+        const { error } = await supabase.rpc('delete_post_with_media', { p_post_id: postId });
+        if (error) throw error;
         const storagePath = post.media_url.split('/').slice(-2).join('/');
         await supabase.storage.from('posts-media').remove([storagePath]);
-      } catch (error: any) {
-        console.error('Error deleting post:', error);
-        // Restore post on error
+      } catch {
         setPosts((current) => {
           const newPosts = [...current];
           const insertIndex = current.findIndex(p => new Date(p.created_at) < new Date(post.created_at));
-          if (insertIndex === -1) {
-            newPosts.push(post);
-          } else {
-            newPosts.splice(insertIndex, 0, post);
-          }
+          if (insertIndex === -1) newPosts.push(post);
+          else newPosts.splice(insertIndex, 0, post);
           return newPosts;
         });
         toast.error("Failed to delete post");
@@ -692,7 +503,7 @@ export const VerticalFeed = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-[calc(100vh-4rem)] flex flex-col bg-background">
       {/* Pull-to-refresh indicator */}
       {pullDistance > 0 && (
         <div 
@@ -702,25 +513,21 @@ export const VerticalFeed = () => {
             opacity: Math.min(pullDistance / 60, 1),
           }}
         >
-          <div className="bg-background/95 backdrop-blur-sm rounded-full p-3 shadow-lg">
+          <div className="bg-card backdrop-blur-sm rounded-full p-3 shadow-lg border border-border">
             <RefreshCw 
-              className={`h-5 w-5 text-primary transition-transform duration-200 ${
-                pullDistance >= 60 ? 'animate-spin' : ''
-              }`}
-              style={{
-                transform: `rotate(${pullDistance * 3}deg)`,
-              }}
+              className={`h-5 w-5 text-primary transition-transform ${pullDistance >= 60 ? 'animate-spin' : ''}`}
+              style={{ transform: `rotate(${pullDistance * 3}deg)` }}
             />
           </div>
         </div>
       )}
 
-      {/* Simple Refresh Button */}
+      {/* Refresh Button */}
       <div className="absolute top-4 right-4 z-10">
         <Button
           variant="ghost"
           size="icon"
-          className="touch-manipulation active:scale-90 transition-transform bg-background/80 backdrop-blur-sm"
+          className="touch-manipulation active:scale-90 bg-card/80 backdrop-blur-sm border border-border"
           onClick={handleRefresh}
           disabled={isRefreshing}
         >
@@ -728,7 +535,7 @@ export const VerticalFeed = () => {
         </Button>
       </div>
 
-      {/* Feed Container - Optimized for mobile */}
+      {/* Feed Container */}
       <div className="flex-1 relative overflow-hidden">
         <div
           ref={containerRef}
@@ -736,10 +543,8 @@ export const VerticalFeed = () => {
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain touch-pan-y"
+          className="h-full overflow-y-scroll snap-y snap-mandatory overscroll-y-contain touch-pan-y scrollbar-hide"
           style={{ 
-            scrollbarWidth: 'none', 
-            msOverflowStyle: 'none',
             WebkitOverflowScrolling: 'touch',
             willChange: 'scroll-position',
             transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.5, 40)}px)` : 'none',
@@ -747,29 +552,18 @@ export const VerticalFeed = () => {
           }}
         >
           {posts.length === 0 && !loading ? (
-            <div className="flex h-screen items-center justify-center snap-start">
+            <div className="flex h-full items-center justify-center snap-start">
               <div className="text-center space-y-4 px-6 animate-fade-in">
-                <p className="text-muted-foreground text-lg">
-                  No posts available yet
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Discover amazing content
-                </p>
+                <p className="text-muted-foreground text-lg">No posts available yet</p>
                 <Button onClick={handleRefresh}>Refresh Feed</Button>
               </div>
             </div>
           ) : (
             <>
-              {/* Top spacer for virtual scrolling */}
               {topSpacerHeight > 0 && (
-                <div 
-                  style={{ height: `${topSpacerHeight}px` }}
-                  className="pointer-events-none"
-                  aria-hidden="true"
-                />
+                <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" />
               )}
               
-              {/* Render only visible posts in window */}
               {visiblePosts.map((post, visibleIndex) => {
                 const actualIndex = visibleStart + visibleIndex;
                 return (
@@ -778,6 +572,7 @@ export const VerticalFeed = () => {
                     ref={actualIndex === posts.length - 8 ? lastPostRef : null}
                     data-post-index={actualIndex}
                     className="snap-start snap-always will-change-transform"
+                    style={{ height: `${postHeight}px` }}
                   >
                     <PostErrorBoundary postId={post.id}>
                       <FeedPost
@@ -802,35 +597,24 @@ export const VerticalFeed = () => {
                 );
               })}
               
-              {/* Bottom spacer for virtual scrolling */}
               {bottomSpacerHeight > 0 && (
-                <div 
-                  style={{ height: `${bottomSpacerHeight}px` }}
-                  className="pointer-events-none"
-                  aria-hidden="true"
-                />
+                <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" />
               )}
+              
               {loadingMore && (
-                <div className="flex h-screen items-center justify-center snap-start">
+                <div className="flex items-center justify-center snap-start" style={{ height: `${postHeight}px` }}>
                   <div className="text-center space-y-4 animate-fade-in">
                     <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
-                    <p className="text-muted-foreground">
-                      {posts.length > 50 
-                        ? "Discovering more content..." 
-                        : "Loading more posts..."}
-                    </p>
+                    <p className="text-muted-foreground">Loading more posts...</p>
                   </div>
                 </div>
               )}
+              
               {!loadingMore && posts.length > 0 && (
-                <div className="flex h-screen items-center justify-center snap-start">
+                <div className="flex items-center justify-center snap-start" style={{ height: `${postHeight}px` }}>
                   <div className="text-center space-y-4 px-6 animate-fade-in">
-                    <p className="text-muted-foreground">Keep scrolling - there's always more!</p>
-                    <Button 
-                      onClick={scrollToTop}
-                      variant="default"
-                      className="touch-manipulation active:scale-95"
-                    >
+                    <p className="text-muted-foreground">You've reached the end</p>
+                    <Button onClick={scrollToTop} variant="default" className="touch-manipulation active:scale-95">
                       Back to top
                     </Button>
                   </div>
