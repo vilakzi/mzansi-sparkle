@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { CommentSheet } from "./CommentSheet";
 import { ShareSheet } from "./ShareSheet";
 import { ReportDialog } from "./ReportDialog";
+import { VideoControls } from "./VideoControls";
+import { BufferIndicator } from "./BufferIndicator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useVideoTracking } from "@/hooks/useVideoTracking";
+import { hapticLike, hapticSave, hapticSnap } from "@/lib/haptics";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,7 +84,8 @@ export const FeedPost = ({
   } | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasAutoRetried, setHasAutoRetried] = useState(false);
-  const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16); // Default to vertical
+  const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
+  const [likeAnimating, setLikeAnimating] = useState(false);
   
   const MAX_RETRIES = 1;
 
@@ -153,10 +157,10 @@ export const FeedPost = ({
 
     const handleWaiting = () => setIsBuffering(true);
     const handleCanPlay = () => setIsBuffering(false);
+    const handlePlaying = () => setIsBuffering(false);
     const handleError = () => handleMediaError();
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
-      // Calculate aspect ratio for proper display
       if (video.videoWidth && video.videoHeight) {
         setVideoAspectRatio(video.videoWidth / video.videoHeight);
       }
@@ -164,12 +168,14 @@ export const FeedPost = ({
 
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('playing', handlePlaying);
     video.addEventListener('error', handleError);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
 
     return () => {
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('playing', handlePlaying);
       video.removeEventListener('error', handleError);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
@@ -208,6 +214,8 @@ export const FeedPost = ({
     if (isActive) {
       videoRef.current.play().catch(() => {});
       setIsPlaying(true);
+      // Haptic feedback when snapping to new video
+      hapticSnap();
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -362,7 +370,15 @@ export const FeedPost = ({
   };
 
   const handleLike = () => {
+    hapticLike();
+    setLikeAnimating(true);
+    setTimeout(() => setLikeAnimating(false), 300);
     onLike();
+  };
+
+  const handleSave = () => {
+    hapticSave();
+    onSaveToggle();
   };
 
   const renderCaption = () => {
@@ -394,7 +410,6 @@ export const FeedPost = ({
     );
   };
 
-  // Determine if video is vertical or horizontal
   const isVerticalVideo = videoAspectRatio < 1;
 
   return (
@@ -406,7 +421,7 @@ export const FeedPost = ({
             {mediaError ? (
               <div className="flex flex-col items-center justify-center text-foreground p-6 space-y-4">
                 <div className="text-center space-y-2">
-                  <p className="text-lg font-semibold text-destructive">{mediaError.type}</p>
+                  <p className="text-lg font-display font-semibold text-destructive">{mediaError.type}</p>
                   <p className="text-sm text-muted-foreground">{mediaError.message}</p>
                 </div>
                 <Button
@@ -441,11 +456,11 @@ export const FeedPost = ({
                   onClick={handleVideoClick}
                 />
 
-                {/* Buffering indicator */}
+                {/* Buffering indicator - enhanced with spinner */}
                 {isBuffering && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
-                    <div className="bg-black/60 rounded-full p-3">
-                      <RefreshCw className="h-6 w-6 text-foreground animate-spin" />
+                    <div className="bg-black/60 backdrop-blur-sm rounded-full p-4">
+                      <Loader2 className="h-8 w-8 text-foreground animate-spin" />
                     </div>
                   </div>
                 )}
@@ -453,8 +468,8 @@ export const FeedPost = ({
                 {/* Play/Pause indicator */}
                 {!isPlaying && !isBuffering && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="bg-black/50 rounded-full p-4">
-                      <Play className="h-16 w-16 text-foreground" fill="white" />
+                    <div className="bg-black/50 backdrop-blur-sm rounded-full p-5 shadow-glow-sm">
+                      <Play className="h-14 w-14 text-foreground" fill="white" />
                     </div>
                   </div>
                 )}
@@ -462,14 +477,17 @@ export const FeedPost = ({
                 {/* Double tap heart animation */}
                 {showHeart && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <Heart className="h-32 w-32 text-destructive animate-ping" fill="currentColor" />
+                    <Heart className="h-32 w-32 text-destructive animate-heart-burst" fill="currentColor" />
                   </div>
                 )}
+
+                {/* Video Controls (Settings menu) */}
+                <VideoControls videoRef={videoRef} isActive={isActive} />
 
                 {/* Volume control */}
                 <button
                   onClick={toggleMute}
-                  className="absolute top-4 right-14 bg-black/50 rounded-full p-2.5 text-foreground transition-transform active:scale-90 z-10"
+                  className="absolute top-4 right-14 bg-black/50 backdrop-blur-sm rounded-full p-2.5 text-foreground transition-all hover:bg-black/70 active:scale-90 z-10"
                 >
                   {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </button>
@@ -480,7 +498,7 @@ export const FeedPost = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute top-4 right-4 bg-black/50 rounded-full text-foreground hover:bg-black/70 z-10 h-10 w-10"
+                      className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm rounded-full text-foreground hover:bg-black/70 z-10 h-10 w-10"
                     >
                       <MoreVertical className="h-5 w-5" />
                     </Button>
@@ -518,11 +536,11 @@ export const FeedPost = ({
         {profile && (
           <div className="flex items-center gap-3 mb-3 pointer-events-auto">
             <Avatar 
-              className="h-10 w-10 border-2 border-foreground/20 cursor-pointer transition-transform active:scale-95"
+              className="h-11 w-11 border-2 border-foreground/20 cursor-pointer transition-transform active:scale-95 ring-2 ring-primary/30"
               onClick={() => navigate(`/profile/${profile.username}`)}
             >
               <AvatarImage src={profile.avatar_url || undefined} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-display text-sm">
                 {profile.display_name[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -530,7 +548,7 @@ export const FeedPost = ({
               className="cursor-pointer"
               onClick={() => navigate(`/profile/${profile.username}`)}
             >
-              <p className="text-foreground font-semibold text-sm">{profile.display_name}</p>
+              <p className="text-foreground font-display font-semibold text-sm">{profile.display_name}</p>
               <p className="text-muted-foreground text-xs">@{profile.username}</p>
             </div>
           </div>
@@ -543,10 +561,16 @@ export const FeedPost = ({
           <div className="flex items-center gap-5">
             <button
               onClick={handleLike}
-              className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
+              className={cn(
+                "flex items-center gap-1.5 text-foreground transition-all active:scale-90",
+                likeAnimating && "animate-scale-bounce"
+              )}
             >
-              <Heart className={cn("h-7 w-7", isLiked && "fill-destructive text-destructive")} />
-              <span className="text-sm font-medium">{likesCount}</span>
+              <Heart className={cn(
+                "h-7 w-7 transition-all",
+                isLiked && "fill-destructive text-destructive scale-110"
+              )} />
+              <span className="text-sm font-medium tabular-nums">{likesCount}</span>
             </button>
             
             <button
@@ -554,7 +578,7 @@ export const FeedPost = ({
               className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
             >
               <MessageCircle className="h-7 w-7" />
-              <span className="text-sm font-medium">{commentsCount}</span>
+              <span className="text-sm font-medium tabular-nums">{commentsCount}</span>
             </button>
             
             <button
@@ -562,41 +586,52 @@ export const FeedPost = ({
               className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
             >
               <Share2 className="h-7 w-7" />
-              <span className="text-sm font-medium">{sharesCount}</span>
+              <span className="text-sm font-medium tabular-nums">{sharesCount}</span>
             </button>
           </div>
           
           <button
-            onClick={onSaveToggle}
+            onClick={handleSave}
             className="text-foreground transition-transform active:scale-90"
           >
-            <Bookmark className={cn("h-7 w-7", isSaved && "fill-foreground")} />
+            <Bookmark className={cn(
+              "h-7 w-7 transition-all",
+              isSaved && "fill-foreground scale-110"
+            )} />
           </button>
         </div>
       </div>
 
-      {/* Video seekbar */}
+      {/* Video seekbar with buffer indicator */}
       {mediaType === 'video' && !mediaError && (
         <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
           <div className="flex items-center gap-2 text-foreground text-xs mb-1.5">
-            <span className="tabular-nums">{formatTime(currentTime)}</span>
+            <span className="tabular-nums font-medium">{formatTime(currentTime)}</span>
             <span className="text-muted-foreground">/</span>
             <span className="tabular-nums text-muted-foreground">{formatTime(duration)}</span>
           </div>
           <div 
-            className="relative h-1 bg-foreground/30 rounded-full cursor-pointer group py-2.5"
+            className="relative h-1 bg-foreground/20 rounded-full cursor-pointer group py-2.5"
             onMouseDown={handleSeekBarMouseDown}
             onTouchStart={handleSeekBarTouch}
             onTouchMove={handleSeekBarTouchMove}
             onTouchEnd={handleSeekBarTouchEnd}
           >
-            <div className="absolute top-1/2 -translate-y-1/2 h-1 w-full bg-foreground/30 rounded-full" />
+            {/* Buffer progress */}
+            <BufferIndicator videoRef={videoRef} progress={progress} />
+            
+            {/* Track background */}
+            <div className="absolute top-1/2 -translate-y-1/2 h-1 w-full bg-foreground/20 rounded-full" />
+            
+            {/* Progress bar */}
             <div 
-              className="absolute top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full transition-all"
+              className="absolute top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full transition-all z-10"
               style={{ width: `${progress}%` }}
             />
+            
+            {/* Thumb */}
             <div 
-              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-foreground rounded-full shadow-lg"
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground rounded-full shadow-lg transition-transform hover:scale-110 z-20"
               style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
             />
           </div>
