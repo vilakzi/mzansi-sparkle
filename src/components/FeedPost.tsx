@@ -481,41 +481,45 @@ export const FeedPost = ({
                   </div>
                 )}
 
-                {/* Video Controls (Settings menu) */}
-                <VideoControls videoRef={videoRef} isActive={isActive} />
-
-                {/* Volume control */}
-                <button
-                  onClick={toggleMute}
-                  className="absolute top-4 right-14 bg-black/50 backdrop-blur-sm rounded-full p-2.5 text-foreground transition-all hover:bg-black/70 active:scale-90 z-10"
-                >
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-
-                {/* More options menu */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm rounded-full text-foreground hover:bg-black/70 z-10 h-10 w-10"
+                {/* Top controls bar - properly aligned */}
+                <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-10">
+                  {/* Left side - Video settings */}
+                  <VideoControls videoRef={videoRef} isActive={isActive} />
+                  
+                  {/* Right side - Volume and menu */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={toggleMute}
+                      className="bg-black/50 backdrop-blur-sm rounded-full p-2.5 text-foreground transition-all hover:bg-black/70 active:scale-90"
                     >
-                      <MoreVertical className="h-5 w-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="z-[100]">
-                    {currentUserId === userId && onDelete && (
-                      <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Post
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => setShowReport(true)}>
-                      <Flag className="h-4 w-4 mr-2" />
-                      Report Post
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                    </button>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="bg-black/50 backdrop-blur-sm rounded-full text-foreground hover:bg-black/70 h-10 w-10"
+                        >
+                          <MoreVertical className="h-5 w-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="z-[100]">
+                        {currentUserId === userId && onDelete && (
+                          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Post
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => setShowReport(true)}>
+                          <Flag className="h-4 w-4 mr-2" />
+                          Report Post
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
               </>
             )}
           </>
@@ -531,7 +535,39 @@ export const FeedPost = ({
       </div>
       
       {/* Bottom overlay with user info and actions */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 pb-6 pointer-events-none z-10">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pb-6 pointer-events-none z-10">
+        {/* Video seekbar - integrated into bottom overlay */}
+        {mediaType === 'video' && !mediaError && (
+          <div className="mb-4 pointer-events-auto">
+            <div 
+              className="relative h-1.5 bg-foreground/20 rounded-full cursor-pointer group"
+              onMouseDown={handleSeekBarMouseDown}
+              onTouchStart={handleSeekBarTouch}
+              onTouchMove={handleSeekBarTouchMove}
+              onTouchEnd={handleSeekBarTouchEnd}
+            >
+              {/* Buffer progress */}
+              <BufferIndicator videoRef={videoRef} progress={progress} />
+              
+              {/* Progress bar */}
+              <div 
+                className="absolute top-0 left-0 h-full bg-primary rounded-full transition-all"
+                style={{ width: `${progress}%` }}
+              />
+              
+              {/* Thumb - visible on interaction */}
+              <div 
+                className="absolute top-1/2 w-3 h-3 bg-foreground rounded-full shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"
+                style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-foreground text-xs mt-1.5">
+              <span className="tabular-nums font-medium">{formatTime(currentTime)}</span>
+              <span className="tabular-nums text-muted-foreground">{formatTime(duration)}</span>
+            </div>
+          </div>
+        )}
+        
         {/* User info */}
         {profile && (
           <div className="flex items-center gap-3 mb-3 pointer-events-auto">
@@ -545,48 +581,48 @@ export const FeedPost = ({
               </AvatarFallback>
             </Avatar>
             <div 
-              className="cursor-pointer"
+              className="cursor-pointer flex-1 min-w-0"
               onClick={() => navigate(`/profile/${profile.username}`)}
             >
-              <p className="text-foreground font-display font-semibold text-sm">{profile.display_name}</p>
-              <p className="text-muted-foreground text-xs">@{profile.username}</p>
+              <p className="text-foreground font-display font-semibold text-sm truncate">{profile.display_name}</p>
+              <p className="text-muted-foreground text-xs truncate">@{profile.username}</p>
             </div>
           </div>
         )}
         
         {renderCaption()}
         
-        {/* Action buttons */}
+        {/* Action buttons - horizontal aligned */}
         <div className="flex items-center justify-between pointer-events-auto">
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-6">
             <button
               onClick={handleLike}
               className={cn(
-                "flex items-center gap-1.5 text-foreground transition-all active:scale-90",
+                "flex items-center gap-2 text-foreground transition-all active:scale-90",
                 likeAnimating && "animate-scale-bounce"
               )}
             >
               <Heart className={cn(
                 "h-7 w-7 transition-all",
-                isLiked && "fill-destructive text-destructive scale-110"
+                isLiked && "fill-destructive text-destructive"
               )} />
-              <span className="text-sm font-medium tabular-nums">{likesCount}</span>
+              <span className="text-sm font-semibold tabular-nums">{likesCount}</span>
             </button>
             
             <button
               onClick={() => setShowComments(true)}
-              className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
+              className="flex items-center gap-2 text-foreground transition-transform active:scale-90"
             >
               <MessageCircle className="h-7 w-7" />
-              <span className="text-sm font-medium tabular-nums">{commentsCount}</span>
+              <span className="text-sm font-semibold tabular-nums">{commentsCount}</span>
             </button>
             
             <button
               onClick={() => setShowShare(true)}
-              className="flex items-center gap-1.5 text-foreground transition-transform active:scale-90"
+              className="flex items-center gap-2 text-foreground transition-transform active:scale-90"
             >
               <Share2 className="h-7 w-7" />
-              <span className="text-sm font-medium tabular-nums">{sharesCount}</span>
+              <span className="text-sm font-semibold tabular-nums">{sharesCount}</span>
             </button>
           </div>
           
@@ -596,47 +632,11 @@ export const FeedPost = ({
           >
             <Bookmark className={cn(
               "h-7 w-7 transition-all",
-              isSaved && "fill-foreground scale-110"
+              isSaved && "fill-foreground"
             )} />
           </button>
         </div>
       </div>
-
-      {/* Video seekbar with buffer indicator */}
-      {mediaType === 'video' && !mediaError && (
-        <div className="absolute bottom-20 left-0 right-0 px-4 z-20 pointer-events-auto">
-          <div className="flex items-center gap-2 text-foreground text-xs mb-1.5">
-            <span className="tabular-nums font-medium">{formatTime(currentTime)}</span>
-            <span className="text-muted-foreground">/</span>
-            <span className="tabular-nums text-muted-foreground">{formatTime(duration)}</span>
-          </div>
-          <div 
-            className="relative h-1 bg-foreground/20 rounded-full cursor-pointer group py-2.5"
-            onMouseDown={handleSeekBarMouseDown}
-            onTouchStart={handleSeekBarTouch}
-            onTouchMove={handleSeekBarTouchMove}
-            onTouchEnd={handleSeekBarTouchEnd}
-          >
-            {/* Buffer progress */}
-            <BufferIndicator videoRef={videoRef} progress={progress} />
-            
-            {/* Track background */}
-            <div className="absolute top-1/2 -translate-y-1/2 h-1 w-full bg-foreground/20 rounded-full" />
-            
-            {/* Progress bar */}
-            <div 
-              className="absolute top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full transition-all z-10"
-              style={{ width: `${progress}%` }}
-            />
-            
-            {/* Thumb */}
-            <div 
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground rounded-full shadow-lg transition-transform hover:scale-110 z-20"
-              style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
-            />
-          </div>
-        </div>
-      )}
       
       <CommentSheet postId={id} isOpen={showComments} onClose={() => setShowComments(false)} />
       <ShareSheet postId={id} isOpen={showShare} onClose={() => setShowShare(false)} />

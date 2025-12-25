@@ -146,7 +146,7 @@ export const VideoControls = ({ videoRef, isActive }: VideoControlsProps) => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="absolute top-4 left-4 bg-black/50 rounded-full p-2.5 text-foreground transition-all hover:bg-black/70 active:scale-90 z-10"
+          className="bg-black/50 backdrop-blur-sm rounded-full p-2.5 text-foreground transition-all hover:bg-black/70 active:scale-90"
           onClick={(e) => e.stopPropagation()}
         >
           <Settings className="h-5 w-5" />
