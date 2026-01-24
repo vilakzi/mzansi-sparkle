@@ -91,6 +91,8 @@ export const FeedPost = ({
   const [showControls, setShowControls] = useState(false);
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   
   const MAX_RETRIES = 1;
 
@@ -194,9 +196,20 @@ export const FeedPost = ({
     const getCurrentUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUserId(user?.id || null);
+      
+      // Check if following this user
+      if (user?.id && userId && user.id !== userId) {
+        const { data } = await supabase
+          .from('follows')
+          .select('id')
+          .eq('follower_id', user.id)
+          .eq('following_id', userId)
+          .maybeSingle();
+        setIsFollowing(!!data);
+      }
     };
     getCurrentUser();
-  }, []);
+  }, [userId]);
 
   // Handle initial video play
   useEffect(() => {
@@ -403,6 +416,29 @@ export const FeedPost = ({
     onSaveToggle();
   };
 
+  const handleFollow = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId || !userId || currentUserId === userId) return;
+    
+    setFollowLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("toggle_follow", {
+        p_following_id: userId,
+      });
+
+      if (error) throw error;
+
+      const result = data[0];
+      setIsFollowing(result.is_following);
+      hapticSnap();
+      toast.success(result.is_following ? "Following" : "Unfollowed");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update follow status");
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   const renderCaption = () => {
     if (!caption) return null;
 
@@ -601,8 +637,12 @@ export const FeedPost = ({
                 {profile.display_name[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            {currentUserId && currentUserId !== userId && (
-              <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-primary rounded-full p-1 shadow-lg">
+            {currentUserId && currentUserId !== userId && !isFollowing && (
+              <button 
+                onClick={handleFollow}
+                disabled={followLoading}
+                className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-primary rounded-full p-1 shadow-lg transition-transform active:scale-90 disabled:opacity-50"
+              >
                 <UserPlus className="h-3 w-3 text-primary-foreground" />
               </button>
             )}
@@ -706,13 +746,16 @@ export const FeedPost = ({
             <span className="text-white font-semibold text-sm">@{profile.username}</span>
             {currentUserId && currentUserId !== userId && (
               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toast.info("Follow feature coming soon");
-                }}
-                className="px-2 py-0.5 border border-white/50 rounded text-white text-xs hover:bg-white/10"
+                onClick={handleFollow}
+                disabled={followLoading}
+                className={cn(
+                  "px-2 py-0.5 border rounded text-white text-xs transition-all disabled:opacity-50",
+                  isFollowing 
+                    ? "border-primary bg-primary/20 hover:bg-primary/30" 
+                    : "border-white/50 hover:bg-white/10"
+                )}
               >
-                Follow
+                {followLoading ? "..." : isFollowing ? "Following" : "Follow"}
               </button>
             )}
           </div>
