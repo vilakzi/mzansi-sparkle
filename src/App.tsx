@@ -19,8 +19,9 @@ import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import Messages from "./pages/Messages";
 import Conversation from "./pages/Conversation";
-import Categories from "./pages/Categories";
-import Category from "./pages/Category";
+// Category pages - placeholder (backend not ready)
+// import Categories from "./pages/Categories";
+// import Category from "./pages/Category";
 import { logPWAStatus, clearOldCaches } from "./lib/pwaUtils";
 
 const queryClient = new QueryClient();
@@ -81,12 +82,13 @@ const App = () => {
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/post/:id" element={<PostDetail />} />
             <Route path="/settings" element={<Settings />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/analytics" element={<Analytics />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/messages/:conversationId" element={<Conversation />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/category/:name" element={<Category />} />
+            {/* Category routes disabled - backend not ready */}
+            {/* <Route path="/categories" element={<Categories />} /> */}
+            {/* <Route path="/category/:name" element={<Category />} /> */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

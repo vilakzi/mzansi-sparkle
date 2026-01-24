@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, LogOut } from "lucide-react";
+import { ArrowLeft, User, LogOut, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { clearAllCaches, getCacheStatus } from "@/lib/clearCache";
 
 type PrivacySettings = {
   is_private: boolean;
@@ -33,6 +34,7 @@ const Settings = () => {
     age_restricted_content: false,
   });
   const [loading, setLoading] = useState(true);
+  const [clearingCache, setClearingCache] = useState(false);
 
   useEffect(() => {
     fetchUserProfile();
@@ -116,6 +118,21 @@ const Settings = () => {
     } catch (error) {
       console.error("Error logging out:", error);
       toast.error("Failed to log out");
+    }
+  };
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    try {
+      const status = await getCacheStatus();
+      console.log('[Settings] Cache status before clear:', status);
+      await clearAllCaches();
+      // Note: clearAllCaches reloads the page, so this won't be reached
+      toast.success("Cache cleared successfully");
+    } catch (error) {
+      console.error("Error clearing cache:", error);
+      toast.error("Failed to clear cache");
+      setClearingCache(false);
     }
   };
 
@@ -258,6 +275,34 @@ const Settings = () => {
                     onCheckedChange={(checked) => updateSettings({ age_restricted_content: checked })}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Storage & Cache */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Storage</CardTitle>
+                <CardDescription>
+                  Manage cached data and storage
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start"
+                  onClick={handleClearCache}
+                  disabled={clearingCache}
+                >
+                  {clearingCache ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  {clearingCache ? "Clearing..." : "Clear Cache"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Clear cached videos and data. This will reload the app.
+                </p>
               </CardContent>
             </Card>
 

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
 import { RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
-import { prefetchVideos } from "@/lib/pwaUtils";
+// Video preloading consolidated into useVideoPreloader hook
 import { useVideoPreloader } from "@/hooks/useVideoPreloader";
 
 interface Post {
@@ -227,20 +227,7 @@ export const VerticalFeed = () => {
         }
       }));
 
-      // Smart video prefetching
-      const connection = (navigator as any).connection;
-      const effectiveType = connection?.effectiveType || '4g';
-      const isSlowConnection = ['slow-2g', '2g', '3g'].includes(effectiveType);
-      
-      const prefetchLimit = isSlowConnection ? 2 : 3;
-      const videoUrls = postsWithDetails
-        .filter(post => post.media_type === 'video')
-        .slice(0, prefetchLimit)
-        .map(post => post.media_url);
-      
-      if (videoUrls.length > 0 && !isSlowConnection) {
-        prefetchVideos(videoUrls).catch(() => {});
-      }
+      // Video preloading is now handled by useVideoPreloader hook
 
       if (isRefresh) setPosts(postsWithDetails);
       else if (cursor) setPosts((current) => [...current, ...postsWithDetails]);
@@ -497,7 +484,7 @@ export const VerticalFeed = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-background">
+    <div className="h-[calc(100vh-4rem)] flex flex-col bg-black">
       {/* Pull-to-refresh indicator */}
       {pullDistance > 0 && (
         <div 

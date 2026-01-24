@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/BottomNav";
+import { UploadButton } from "@/components/UploadButton";
 import { ArrowLeft, Hash } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,6 +23,23 @@ const Hashtag = () => {
   const [posts, setPosts] = useState<HashtagPost[]>([]);
   const [postsCount, setPostsCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [showUpload, setShowUpload] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        if (data) setUserProfile(data);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   useEffect(() => {
     if (name) {
@@ -112,7 +131,11 @@ const Hashtag = () => {
           ) : (
             <div className="grid grid-cols-3 gap-1">
               {posts.map((post) => (
-                <Card key={post.id} className="aspect-square overflow-hidden relative group cursor-pointer">
+                <Card 
+                  key={post.id} 
+                  className="aspect-square overflow-hidden relative group cursor-pointer"
+                  onClick={() => navigate(`/post/${post.id}`)}
+                >
                   {post.media_type.startsWith("image") ? (
                     <img
                       src={post.media_url}
@@ -137,6 +160,9 @@ const Hashtag = () => {
           )}
         </div>
       </div>
+
+      {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
+      <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
   );
 };
