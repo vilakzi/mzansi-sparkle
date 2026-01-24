@@ -9,9 +9,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, LogOut, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, User, LogOut, Trash2, Loader2, Play, Wifi, Signal, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { clearAllCaches, getCacheStatus } from "@/lib/clearCache";
+import { useVideoQualityContext } from "@/contexts/VideoQualityContext";
+import { VideoQualityPreference } from "@/hooks/useVideoQuality";
 
 type PrivacySettings = {
   is_private: boolean;
@@ -19,6 +21,94 @@ type PrivacySettings = {
   show_followers: boolean;
   show_following: boolean;
   age_restricted_content: boolean;
+};
+
+// Video Settings Card Component
+const VideoSettingsCard = () => {
+  const { preference, effectiveQuality, networkStatus, setPreference } = useVideoQualityContext();
+
+  const getNetworkIcon = () => {
+    if (networkStatus === "fast") return <Wifi className="h-4 w-4 text-green-500" />;
+    if (networkStatus === "slow") return <Signal className="h-4 w-4 text-yellow-500" />;
+    return <Signal className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const getNetworkLabel = () => {
+    if (networkStatus === "fast") return "Fast connection";
+    if (networkStatus === "slow") return "Slow connection";
+    return "Unknown";
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Play className="h-5 w-5" />
+          Video Playback
+        </CardTitle>
+        <CardDescription>
+          Control video quality and data usage
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Video Quality Selection */}
+        <div className="space-y-3">
+          <Label htmlFor="video-quality">Video Quality</Label>
+          <Select
+            value={preference}
+            onValueChange={(value) => setPreference(value as VideoQualityPreference)}
+          >
+            <SelectTrigger id="video-quality">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <span>Auto (Recommended)</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="high">
+                <div className="flex items-center gap-2">
+                  <Wifi className="h-4 w-4" />
+                  <span>High Quality</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="low">
+                <div className="flex items-center gap-2">
+                  <Signal className="h-4 w-4" />
+                  <span>Data Saver</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground">
+            {preference === "auto" 
+              ? "Automatically adjusts quality based on your network speed"
+              : preference === "high"
+                ? "Always load highest quality videos (uses more data)"
+                : "Reduce video quality to save data"
+            }
+          </p>
+        </div>
+
+        {/* Network Status Indicator */}
+        {preference === "auto" && (
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+            <div className="flex items-center gap-3">
+              {getNetworkIcon()}
+              <div>
+                <p className="text-sm font-medium">{getNetworkLabel()}</p>
+                <p className="text-xs text-muted-foreground">
+                  Currently using {effectiveQuality === "high" ? "high" : "reduced"} quality
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 };
 
 const Settings = () => {
@@ -252,6 +342,9 @@ const Settings = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Video Settings */}
+            <VideoSettingsCard />
 
             {/* Content Settings */}
             <Card>
