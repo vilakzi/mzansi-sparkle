@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, Pause, MoreVertical, Flag, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, MoreVertical, Flag, Trash2, RefreshCw, Loader2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -75,7 +75,6 @@ export const FeedPost = ({
   const wasPlayingRef = useRef(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const hasInitializedRef = useRef(false);
-  const preloadedRef = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
   const [mediaError, setMediaError] = useState<{
     type: string;
@@ -86,6 +85,9 @@ export const FeedPost = ({
   const [hasAutoRetried, setHasAutoRetried] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
   const [likeAnimating, setLikeAnimating] = useState(false);
+  const [showControls, setShowControls] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const MAX_RETRIES = 1;
 
@@ -93,7 +95,7 @@ export const FeedPost = ({
   useVideoTracking({ postId: id, videoRef, isActive });
 
   // Enhanced media error handling
-  const handleMediaError = () => {
+  const handleMediaError = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -148,7 +150,7 @@ export const FeedPost = ({
         }, 2000);
       }
     }
-  };
+  }, [id, retryCount, hasAutoRetried]);
 
   // Handle buffering states
   useEffect(() => {
@@ -179,16 +181,7 @@ export const FeedPost = ({
       video.removeEventListener('error', handleError);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, [mediaType, retryCount]);
-
-  // Preload video
-  useEffect(() => {
-    if (mediaType === 'video' && !preloadedRef.current && videoRef.current) {
-      videoRef.current.preload = 'auto';
-      videoRef.current.load();
-      preloadedRef.current = true;
-    }
-  }, [mediaType]);
+  }, [mediaType, handleMediaError]);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -214,7 +207,6 @@ export const FeedPost = ({
     if (isActive) {
       videoRef.current.play().catch(() => {});
       setIsPlaying(true);
-      // Haptic feedback when snapping to new video
       hapticSnap();
     } else {
       videoRef.current.pause();
@@ -238,15 +230,36 @@ export const FeedPost = ({
     return () => video.removeEventListener('timeupdate', updateProgress);
   }, [isScrubbing]);
 
+  // Auto-hide controls
+  const showControlsTemporarily = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleVideoClick = () => {
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
 
     if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+      // Double tap to like
       handleLike();
       setShowHeart(true);
       setTimeout(() => setShowHeart(false), 1000);
     } else {
+      // Single tap to toggle play/pause and show controls
       if (videoRef.current) {
         if (isPlaying) {
           videoRef.current.pause();
@@ -256,6 +269,7 @@ export const FeedPost = ({
           setIsPlaying(true);
         }
       }
+      showControlsTemporarily();
     }
     lastTapRef.current = now;
   };
@@ -266,6 +280,7 @@ export const FeedPost = ({
       videoRef.current.muted = !isMuted;
       setIsMuted(!isMuted);
     }
+    showControlsTemporarily();
   };
 
   const handleSeekBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -385,37 +400,56 @@ export const FeedPost = ({
     if (!caption) return null;
 
     const parts = caption.split(/(#[a-zA-Z0-9_]+)/g);
+    const isLong = caption.length > 80;
     
     return (
-      <p className="mb-3 text-foreground text-base font-medium pointer-events-auto line-clamp-2">
-        {parts.map((part, index) => {
-          if (part.startsWith("#")) {
-            const hashtagName = part.substring(1);
-            return (
-              <span
-                key={index}
-                className="text-primary cursor-pointer hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/hashtag/${hashtagName}`);
-                }}
-              >
-                {part}
-              </span>
-            );
-          }
-          return <span key={index}>{part}</span>;
-        })}
-      </p>
+      <div className="pointer-events-auto">
+        <p 
+          className={cn(
+            "text-foreground text-sm font-medium transition-all",
+            !captionExpanded && isLong && "line-clamp-2"
+          )}
+        >
+          {parts.map((part, index) => {
+            if (part.startsWith("#")) {
+              const hashtagName = part.substring(1);
+              return (
+                <span
+                  key={index}
+                  className="text-primary cursor-pointer hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/hashtag/${hashtagName}`);
+                  }}
+                >
+                  {part}
+                </span>
+              );
+            }
+            return <span key={index}>{part}</span>;
+          })}
+        </p>
+        {isLong && (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setCaptionExpanded(!captionExpanded);
+            }}
+            className="text-muted-foreground text-xs mt-1 hover:text-foreground"
+          >
+            {captionExpanded ? "Show less" : "... more"}
+          </button>
+        )}
+      </div>
     );
   };
 
   const isVerticalVideo = videoAspectRatio < 1;
 
   return (
-    <div className="relative h-[calc(100vh-4rem)] w-full snap-start snap-always bg-background flex items-center justify-center overflow-hidden">
-      {/* Media container with proper aspect ratio handling */}
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
+    <div className="relative h-full w-full snap-start snap-always bg-black flex items-center justify-center overflow-hidden">
+      {/* Media container */}
+      <div className="absolute inset-0 flex items-center justify-center">
         {mediaType === "video" ? (
           <>
             {mediaError ? (
@@ -452,24 +486,24 @@ export const FeedPost = ({
                   playsInline
                   muted={isMuted}
                   autoPlay={isActive}
-                  preload="auto"
+                  preload="metadata"
                   onClick={handleVideoClick}
                 />
 
-                {/* Buffering indicator - enhanced with spinner */}
+                {/* Buffering indicator */}
                 {isBuffering && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
-                    <div className="bg-black/60 backdrop-blur-sm rounded-full p-4">
-                      <Loader2 className="h-8 w-8 text-foreground animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-black/40 backdrop-blur-sm rounded-full p-3">
+                      <Loader2 className="h-6 w-6 text-white animate-spin" />
                     </div>
                   </div>
                 )}
 
-                {/* Play/Pause indicator */}
+                {/* Play indicator */}
                 {!isPlaying && !isBuffering && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="bg-black/50 backdrop-blur-sm rounded-full p-5 shadow-glow-sm">
-                      <Play className="h-14 w-14 text-foreground" fill="white" />
+                    <div className="bg-black/40 backdrop-blur-sm rounded-full p-4">
+                      <Play className="h-12 w-12 text-white" fill="white" />
                     </div>
                   </div>
                 )}
@@ -477,49 +511,9 @@ export const FeedPost = ({
                 {/* Double tap heart animation */}
                 {showHeart && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <Heart className="h-32 w-32 text-destructive animate-heart-burst" fill="currentColor" />
+                    <Heart className="h-28 w-28 text-red-500 animate-heart-burst" fill="currentColor" />
                   </div>
                 )}
-
-                {/* Top controls bar - properly aligned */}
-                <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-10">
-                  {/* Left side - Video settings */}
-                  <VideoControls videoRef={videoRef} isActive={isActive} />
-                  
-                  {/* Right side - Volume and menu */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleMute}
-                      className="bg-black/50 backdrop-blur-sm rounded-full p-2.5 text-foreground transition-all hover:bg-black/70 active:scale-90"
-                    >
-                      {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                    </button>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="bg-black/50 backdrop-blur-sm rounded-full text-foreground hover:bg-black/70 h-10 w-10"
-                        >
-                          <MoreVertical className="h-5 w-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="z-[100]">
-                        {currentUserId === userId && onDelete && (
-                          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Post
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => setShowReport(true)}>
-                          <Flag className="h-4 w-4 mr-2" />
-                          Report Post
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
               </>
             )}
           </>
@@ -533,46 +527,59 @@ export const FeedPost = ({
           />
         )}
       </div>
-      
-      {/* Bottom overlay with user info and actions */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pb-6 pointer-events-none z-10">
-        {/* Video seekbar - integrated into bottom overlay */}
-        {mediaType === 'video' && !mediaError && (
-          <div className="mb-4 pointer-events-auto">
-            <div 
-              className="relative h-1.5 bg-foreground/20 rounded-full cursor-pointer group"
-              onMouseDown={handleSeekBarMouseDown}
-              onTouchStart={handleSeekBarTouch}
-              onTouchMove={handleSeekBarTouchMove}
-              onTouchEnd={handleSeekBarTouchEnd}
+
+      {/* Top controls - auto-hiding */}
+      {mediaType === 'video' && !mediaError && (
+        <div 
+          className={cn(
+            "absolute top-0 left-0 right-0 flex items-center justify-between p-3 z-20 transition-opacity duration-300",
+            showControls || !isPlaying ? "opacity-100" : "opacity-0"
+          )}
+        >
+          <VideoControls videoRef={videoRef} isActive={isActive} />
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMute}
+              className="bg-black/40 backdrop-blur-sm rounded-full p-2 text-white transition-all hover:bg-black/60 active:scale-90"
             >
-              {/* Buffer progress */}
-              <BufferIndicator videoRef={videoRef} progress={progress} />
-              
-              {/* Progress bar */}
-              <div 
-                className="absolute top-0 left-0 h-full bg-primary rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
-              
-              {/* Thumb - visible on interaction */}
-              <div 
-                className="absolute top-1/2 w-3 h-3 bg-foreground rounded-full shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"
-                style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-foreground text-xs mt-1.5">
-              <span className="tabular-nums font-medium">{formatTime(currentTime)}</span>
-              <span className="tabular-nums text-muted-foreground">{formatTime(duration)}</span>
-            </div>
+              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="bg-black/40 backdrop-blur-sm rounded-full text-white hover:bg-black/60 h-9 w-9"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-[100]">
+                {currentUserId === userId && onDelete && (
+                  <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Post
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => setShowReport(true)}>
+                  <Flag className="h-4 w-4 mr-2" />
+                  Report Post
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        )}
-        
-        {/* User info */}
+        </div>
+      )}
+
+      {/* Right side action bar (TikTok style) */}
+      <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5 z-10">
+        {/* Profile avatar */}
         {profile && (
-          <div className="flex items-center gap-3 mb-3 pointer-events-auto">
+          <div className="relative mb-2">
             <Avatar 
-              className="h-11 w-11 border-2 border-foreground/20 cursor-pointer transition-transform active:scale-95 ring-2 ring-primary/30"
+              className="h-12 w-12 border-2 border-white cursor-pointer transition-transform active:scale-95 shadow-lg"
               onClick={() => navigate(`/profile/${profile.username}`)}
             >
               <AvatarImage src={profile.avatar_url || undefined} />
@@ -580,62 +587,124 @@ export const FeedPost = ({
                 {profile.display_name[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
+            {currentUserId && currentUserId !== userId && (
+              <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-primary rounded-full p-1 shadow-lg">
+                <UserPlus className="h-3 w-3 text-primary-foreground" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Like button */}
+        <button
+          onClick={handleLike}
+          className={cn(
+            "flex flex-col items-center gap-1 transition-all active:scale-90",
+            likeAnimating && "animate-scale-bounce"
+          )}
+        >
+          <div className={cn(
+            "p-2 rounded-full transition-all",
+            isLiked ? "bg-red-500/20" : "bg-black/30 backdrop-blur-sm"
+          )}>
+            <Heart className={cn(
+              "h-7 w-7 transition-all",
+              isLiked ? "fill-red-500 text-red-500" : "text-white"
+            )} />
+          </div>
+          <span className="text-white text-xs font-semibold tabular-nums drop-shadow-lg">{likesCount}</span>
+        </button>
+        
+        {/* Comment button */}
+        <button
+          onClick={() => setShowComments(true)}
+          className="flex flex-col items-center gap-1 transition-transform active:scale-90"
+        >
+          <div className="p-2 rounded-full bg-black/30 backdrop-blur-sm">
+            <MessageCircle className="h-7 w-7 text-white" />
+          </div>
+          <span className="text-white text-xs font-semibold tabular-nums drop-shadow-lg">{commentsCount}</span>
+        </button>
+        
+        {/* Share button */}
+        <button
+          onClick={() => setShowShare(true)}
+          className="flex flex-col items-center gap-1 transition-transform active:scale-90"
+        >
+          <div className="p-2 rounded-full bg-black/30 backdrop-blur-sm">
+            <Share2 className="h-7 w-7 text-white" />
+          </div>
+          <span className="text-white text-xs font-semibold tabular-nums drop-shadow-lg">{sharesCount}</span>
+        </button>
+        
+        {/* Save button */}
+        <button
+          onClick={handleSave}
+          className="flex flex-col items-center gap-1 transition-transform active:scale-90"
+        >
+          <div className={cn(
+            "p-2 rounded-full transition-all",
+            isSaved ? "bg-yellow-500/20" : "bg-black/30 backdrop-blur-sm"
+          )}>
+            <Bookmark className={cn(
+              "h-7 w-7 transition-all",
+              isSaved ? "fill-yellow-400 text-yellow-400" : "text-white"
+            )} />
+          </div>
+        </button>
+      </div>
+
+      {/* Bottom info overlay - minimal gradient */}
+      <div className="absolute bottom-0 left-0 right-20 bg-gradient-to-t from-black/60 via-black/30 to-transparent p-4 pb-5 pointer-events-none z-10">
+        {/* Video seekbar */}
+        {mediaType === 'video' && !mediaError && (
+          <div className="mb-3 pointer-events-auto">
             <div 
-              className="cursor-pointer flex-1 min-w-0"
-              onClick={() => navigate(`/profile/${profile.username}`)}
+              className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
+              onMouseDown={handleSeekBarMouseDown}
+              onTouchStart={handleSeekBarTouch}
+              onTouchMove={handleSeekBarTouchMove}
+              onTouchEnd={handleSeekBarTouchEnd}
             >
-              <p className="text-foreground font-display font-semibold text-sm truncate">{profile.display_name}</p>
-              <p className="text-muted-foreground text-xs truncate">@{profile.username}</p>
+              <BufferIndicator videoRef={videoRef} progress={progress} />
+              <div 
+                className="absolute top-0 left-0 h-full bg-white rounded-full transition-all"
+                style={{ width: `${progress}%` }}
+              />
+              <div 
+                className="absolute top-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"
+                style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-white/80 text-xs mt-1">
+              <span className="tabular-nums">{formatTime(currentTime)}</span>
+              <span className="tabular-nums">{formatTime(duration)}</span>
             </div>
           </div>
         )}
         
-        {renderCaption()}
-        
-        {/* Action buttons - horizontal aligned */}
-        <div className="flex items-center justify-between pointer-events-auto">
-          <div className="flex items-center gap-6">
-            <button
-              onClick={handleLike}
-              className={cn(
-                "flex items-center gap-2 text-foreground transition-all active:scale-90",
-                likeAnimating && "animate-scale-bounce"
-              )}
-            >
-              <Heart className={cn(
-                "h-7 w-7 transition-all",
-                isLiked && "fill-destructive text-destructive"
-              )} />
-              <span className="text-sm font-semibold tabular-nums">{likesCount}</span>
-            </button>
-            
-            <button
-              onClick={() => setShowComments(true)}
-              className="flex items-center gap-2 text-foreground transition-transform active:scale-90"
-            >
-              <MessageCircle className="h-7 w-7" />
-              <span className="text-sm font-semibold tabular-nums">{commentsCount}</span>
-            </button>
-            
-            <button
-              onClick={() => setShowShare(true)}
-              className="flex items-center gap-2 text-foreground transition-transform active:scale-90"
-            >
-              <Share2 className="h-7 w-7" />
-              <span className="text-sm font-semibold tabular-nums">{sharesCount}</span>
-            </button>
-          </div>
-          
-          <button
-            onClick={handleSave}
-            className="text-foreground transition-transform active:scale-90"
+        {/* User info row */}
+        {profile && (
+          <div 
+            className="flex items-center gap-2 mb-2 pointer-events-auto cursor-pointer"
+            onClick={() => navigate(`/profile/${profile.username}`)}
           >
-            <Bookmark className={cn(
-              "h-7 w-7 transition-all",
-              isSaved && "fill-foreground"
-            )} />
-          </button>
-        </div>
+            <span className="text-white font-semibold text-sm">@{profile.username}</span>
+            {currentUserId && currentUserId !== userId && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toast.info("Follow feature coming soon");
+                }}
+                className="px-2 py-0.5 border border-white/50 rounded text-white text-xs hover:bg-white/10"
+              >
+                Follow
+              </button>
+            )}
+          </div>
+        )}
+        
+        {renderCaption()}
       </div>
       
       <CommentSheet postId={id} isOpen={showComments} onClose={() => setShowComments(false)} />
