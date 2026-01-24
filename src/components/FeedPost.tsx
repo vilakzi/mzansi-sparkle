@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useVideoTracking } from "@/hooks/useVideoTracking";
 import { hapticLike, hapticSave, hapticSnap } from "@/lib/haptics";
+import { getVideoErrorMessage, checkVideoFormatSupport } from "@/lib/videoFormatUtils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,8 +80,10 @@ export const FeedPost = ({
   const [mediaError, setMediaError] = useState<{
     type: string;
     message: string;
+    suggestion?: string;
     isNetworkError: boolean;
   } | null>(null);
+  const [formatChecked, setFormatChecked] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasAutoRetried, setHasAutoRetried] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
@@ -94,54 +97,58 @@ export const FeedPost = ({
   // Track video engagement
   useVideoTracking({ postId: id, videoRef, isActive });
 
-  // Enhanced media error handling
+  // Check format support on mount
+  useEffect(() => {
+    if (mediaType === 'video' && mediaUrl && !formatChecked) {
+      const formatCheck = checkVideoFormatSupport('', mediaUrl);
+      if (!formatCheck.isSupported && formatCheck.fallbackMessage) {
+        console.warn('[FeedPost] Video format may not be supported:', {
+          postId: id,
+          url: mediaUrl,
+          format: formatCheck.format,
+        });
+      }
+      setFormatChecked(true);
+    }
+  }, [mediaType, mediaUrl, formatChecked, id]);
+
+  // Enhanced media error handling with format-aware messages
   const handleMediaError = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const error = video.error;
-    console.error('[FeedPost] Video loading error:', { postId: id, error: error?.message });
+    console.error('[FeedPost] Video loading error:', { 
+      postId: id, 
+      errorCode: error?.code,
+      errorMessage: error?.message,
+      mediaUrl: mediaUrl.substring(0, 100) + '...',
+    });
 
-    const isOnline = navigator.onLine;
-    let errorType = 'Unknown Error';
-    let errorMessage = 'Unable to load video. Please try again.';
-    let isNetworkError = false;
+    // Get format-aware error message
+    const errorInfo = getVideoErrorMessage(error?.code, mediaUrl);
+    const isNetworkError = error?.code === MediaError.MEDIA_ERR_NETWORK || !navigator.onLine;
 
-    if (!isOnline) {
-      errorType = 'Network Error';
-      errorMessage = 'No internet connection. Please check your network.';
-      isNetworkError = true;
-    } else if (error) {
-      switch (error.code) {
-        case MediaError.MEDIA_ERR_ABORTED:
-          errorType = 'Playback Aborted';
-          errorMessage = 'Video playback was aborted.';
-          break;
-        case MediaError.MEDIA_ERR_NETWORK:
-          errorType = 'Network Error';
-          errorMessage = 'Network error while loading video.';
-          isNetworkError = true;
-          break;
-        case MediaError.MEDIA_ERR_DECODE:
-          errorType = 'Decode Error';
-          errorMessage = 'Video format not supported.';
-          break;
-        case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-          errorType = 'Source Not Found';
-          errorMessage = 'Video not available.';
-          break;
-      }
-    }
+    // For format/decode errors, don't retry - it won't help
+    const isFormatError = error?.code === MediaError.MEDIA_ERR_DECODE || 
+                          error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
 
-    if (retryCount < MAX_RETRIES && isOnline) {
+    if (retryCount < MAX_RETRIES && navigator.onLine && !isFormatError) {
       setRetryCount(prev => prev + 1);
+      console.log('[FeedPost] Retrying video load...', { retryCount: retryCount + 1 });
       setTimeout(() => {
         if (videoRef.current) videoRef.current.load();
       }, 1000);
     } else {
-      setMediaError({ type: errorType, message: errorMessage, isNetworkError });
+      setMediaError({ 
+        type: errorInfo.type, 
+        message: errorInfo.message, 
+        suggestion: errorInfo.suggestion,
+        isNetworkError,
+      });
       
-      if (!hasAutoRetried && isOnline) {
+      // Only auto-retry for network errors, not format errors
+      if (!hasAutoRetried && navigator.onLine && !isFormatError) {
         setTimeout(() => {
           setHasAutoRetried(true);
           setMediaError(null);
@@ -150,7 +157,7 @@ export const FeedPost = ({
         }, 2000);
       }
     }
-  }, [id, retryCount, hasAutoRetried]);
+  }, [id, mediaUrl, retryCount, hasAutoRetried]);
 
   // Handle buffering states
   useEffect(() => {
@@ -453,10 +460,16 @@ export const FeedPost = ({
         {mediaType === "video" ? (
           <>
             {mediaError ? (
-              <div className="flex flex-col items-center justify-center text-foreground p-6 space-y-4">
+              <div className="flex flex-col items-center justify-center text-foreground p-6 space-y-4 max-w-xs">
+                <div className="bg-destructive/10 rounded-full p-4">
+                  <RefreshCw className="h-8 w-8 text-destructive" />
+                </div>
                 <div className="text-center space-y-2">
                   <p className="text-lg font-display font-semibold text-destructive">{mediaError.type}</p>
                   <p className="text-sm text-muted-foreground">{mediaError.message}</p>
+                  {mediaError.suggestion && (
+                    <p className="text-xs text-muted-foreground/70 mt-2">{mediaError.suggestion}</p>
+                  )}
                 </div>
                 <Button
                   size="sm"
@@ -465,6 +478,7 @@ export const FeedPost = ({
                     setMediaError(null);
                     setRetryCount(0);
                     setHasAutoRetried(false);
+                    setFormatChecked(false);
                     if (videoRef.current) videoRef.current.load();
                   }}
                 >

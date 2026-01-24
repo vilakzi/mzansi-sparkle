@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { resizeImage } from "@/lib/imageProcessing";
 import { validateVideoFile, formatFileSize } from "@/lib/videoProcessing";
+import { validateVideoFormat } from "@/lib/videoFormatUtils";
 
 type UploadButtonProps = {
   onClose?: () => void;
@@ -25,6 +26,19 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
 
     // Validate video files
     if (selectedFile.type.startsWith('video/')) {
+      // First check format compatibility
+      const formatValidation = validateVideoFormat(selectedFile);
+      if (!formatValidation.isValid) {
+        toast.error(formatValidation.error || 'Invalid video format');
+        return;
+      }
+      
+      // Show warning for potentially incompatible formats
+      if (formatValidation.warning) {
+        toast.warning(formatValidation.warning, { duration: 5000 });
+      }
+
+      // Then validate file properties (size, duration)
       const validation = await validateVideoFile(selectedFile);
       if (!validation.isValid) {
         toast.error(validation.error || 'Invalid video file');
