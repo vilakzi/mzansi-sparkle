@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { 
   Settings, 
   Gauge, 
   Check,
-  ChevronLeft
+  ChevronLeft,
+  Wifi,
+  Signal,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +15,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { hapticSelect } from "@/lib/haptics";
+import { useVideoQualityContext } from "@/contexts/VideoQualityContext";
+import { VideoQualityPreference } from "@/hooks/useVideoQuality";
 
 interface VideoControlsProps {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -21,18 +26,34 @@ interface VideoControlsProps {
 type MenuView = 'main' | 'speed' | 'quality';
 
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-const QUALITY_OPTIONS = [
-  { label: 'Auto', value: 'auto' },
-  { label: '720p', value: '720' },
-  { label: '480p', value: '480' },
-  { label: '360p', value: '360' },
+
+const QUALITY_OPTIONS: { label: string; value: VideoQualityPreference; icon: React.ReactNode; description: string }[] = [
+  { 
+    label: 'Auto', 
+    value: 'auto', 
+    icon: <Zap className="h-4 w-4 text-primary" />,
+    description: 'Adapts to network'
+  },
+  { 
+    label: 'High', 
+    value: 'high', 
+    icon: <Wifi className="h-4 w-4" />,
+    description: 'Best quality'
+  },
+  { 
+    label: 'Low', 
+    value: 'low', 
+    icon: <Signal className="h-4 w-4" />,
+    description: 'Saves data'
+  },
 ];
 
 export const VideoControls = ({ videoRef, isActive }: VideoControlsProps) => {
   const [open, setOpen] = useState(false);
   const [menuView, setMenuView] = useState<MenuView>('main');
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [quality, setQuality] = useState('auto');
+  
+  const { preference, effectiveQuality, networkStatus, setPreference } = useVideoQualityContext();
 
   // Reset menu view when popover closes
   useEffect(() => {
@@ -50,12 +71,17 @@ export const VideoControls = ({ videoRef, isActive }: VideoControlsProps) => {
     setMenuView('main');
   };
 
-  const handleQualityChange = (q: string) => {
-    setQuality(q);
+  const handleQualityChange = (q: VideoQualityPreference) => {
+    setPreference(q);
     hapticSelect();
-    // Quality switching would require HLS/DASH implementation
-    // For now, we just track the preference
     setMenuView('main');
+  };
+
+  const getQualityLabel = () => {
+    if (preference === 'auto') {
+      return `Auto (${effectiveQuality === 'high' ? 'HD' : 'SD'})`;
+    }
+    return preference === 'high' ? 'High' : 'Low';
   };
 
   const renderMainMenu = () => (
@@ -79,7 +105,15 @@ export const VideoControls = ({ videoRef, isActive }: VideoControlsProps) => {
           <Settings className="h-4 w-4 text-muted-foreground" />
           <span>Quality</span>
         </div>
-        <span className="text-muted-foreground capitalize">{quality}</span>
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          {preference === 'auto' && networkStatus === 'slow' && (
+            <Signal className="h-3 w-3 text-yellow-500" />
+          )}
+          {preference === 'auto' && networkStatus === 'fast' && (
+            <Wifi className="h-3 w-3 text-green-500" />
+          )}
+          <span>{getQualityLabel()}</span>
+        </div>
       </button>
     </div>
   );
@@ -128,15 +162,41 @@ export const VideoControls = ({ videoRef, isActive }: VideoControlsProps) => {
           onClick={() => handleQualityChange(option.value)}
           className={cn(
             "w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors text-sm",
-            quality === option.value 
+            preference === option.value 
               ? "bg-primary/20 text-primary" 
               : "hover:bg-secondary/50"
           )}
         >
-          <span>{option.label}</span>
-          {quality === option.value && <Check className="h-4 w-4" />}
+          <div className="flex items-center gap-3">
+            {option.icon}
+            <div className="text-left">
+              <span className="block">{option.label}</span>
+              <span className="text-xs text-muted-foreground">{option.description}</span>
+            </div>
+          </div>
+          {preference === option.value && <Check className="h-4 w-4" />}
         </button>
       ))}
+      
+      {/* Network status indicator for Auto mode */}
+      {preference === 'auto' && (
+        <div className="mt-2 px-3 py-2 text-xs text-muted-foreground border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            {networkStatus === 'fast' ? (
+              <Wifi className="h-3 w-3 text-green-500" />
+            ) : networkStatus === 'slow' ? (
+              <Signal className="h-3 w-3 text-yellow-500" />
+            ) : (
+              <Signal className="h-3 w-3" />
+            )}
+            <span>
+              {networkStatus === 'fast' && 'Fast connection • HD quality'}
+              {networkStatus === 'slow' && 'Slow connection • SD quality'}
+              {networkStatus === 'unknown' && 'Checking network...'}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -155,7 +215,7 @@ export const VideoControls = ({ videoRef, isActive }: VideoControlsProps) => {
       <PopoverContent 
         align="start" 
         side="bottom"
-        className="w-56 p-2 bg-card/95 backdrop-blur-xl border-border/50"
+        className="w-64 p-2 bg-card/95 backdrop-blur-xl border-border/50"
         onClick={(e) => e.stopPropagation()}
       >
         {menuView === 'main' && renderMainMenu()}
