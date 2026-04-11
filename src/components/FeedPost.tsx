@@ -59,7 +59,7 @@ export const FeedPost = memo(function FeedPost({
   onDelete,
   userId,
   profile,
-}: FeedPostProps) => {
+}: FeedPostProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
