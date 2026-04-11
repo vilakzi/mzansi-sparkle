@@ -83,8 +83,8 @@ const Profile = () => {
             .select("id")
             .eq("follower_id", user.id)
             .eq("following_id", profileData.id)
-            .single();
-          
+            .maybeSingle();
+
           setIsFollowing(!!followData);
         }
 
@@ -103,7 +103,7 @@ const Profile = () => {
               .select("id")
               .eq("post_id", post.id)
               .eq("user_id", user.id)
-              .single();
+              .maybeSingle();
             
             return { ...post, user_liked: !!likeData };
           })
@@ -328,7 +328,7 @@ const Profile = () => {
             <Avatar className="h-20 w-20 flex-shrink-0 ring-2 ring-border">
               <AvatarImage src={profile.avatar_url || undefined} />
               <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                {profile.display_name[0].toUpperCase()}
+                {profile.display_name?.[0]?.toUpperCase() ?? 'U'}
               </AvatarFallback>
             </Avatar>
 

@@ -634,7 +634,7 @@ export const FeedPost = ({
             >
               <AvatarImage src={profile.avatar_url || undefined} />
               <AvatarFallback className="bg-primary text-primary-foreground font-display text-sm">
-                {profile.display_name[0].toUpperCase()}
+                {profile.display_name?.[0]?.toUpperCase() ?? 'U'}
               </AvatarFallback>
             </Avatar>
             {currentUserId && currentUserId !== userId && !isFollowing && (

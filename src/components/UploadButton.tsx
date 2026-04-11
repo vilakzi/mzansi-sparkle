@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Upload, X, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -19,6 +19,12 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -146,6 +152,7 @@ export const UploadButton = ({ onClose }: UploadButtonProps) => {
                 variant="destructive"
                 className="absolute top-2 right-2"
                 onClick={() => {
+                  if (preview) URL.revokeObjectURL(preview);
                   setFile(null);
                   setPreview(null);
                 }}

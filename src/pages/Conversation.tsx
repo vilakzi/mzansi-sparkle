@@ -173,7 +173,7 @@ export default function Conversation() {
               >
                 <AvatarImage src={otherUser.avatar_url || ''} />
                 <AvatarFallback>
-                  {otherUser.display_name[0]?.toUpperCase()}
+                  {otherUser.display_name?.[0]?.toUpperCase() ?? '?'}
                 </AvatarFallback>
               </Avatar>
               <div

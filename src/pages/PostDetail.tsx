@@ -76,13 +76,13 @@ const PostDetail = () => {
             .select("id")
             .eq("post_id", id)
             .eq("user_id", user.id)
-            .single(),
+            .maybeSingle(),
           supabase
             .from("saved_posts")
             .select("id")
             .eq("post_id", id)
             .eq("user_id", user.id)
-            .single()
+            .maybeSingle()
         ]);
 
         setPost({
@@ -162,7 +162,7 @@ const PostDetail = () => {
     }
   };
 
-  if (loading || !post) {
+  if (loading) {
     return <PostDetailLoadingSkeleton />;
   }
 
@@ -193,7 +193,7 @@ const PostDetail = () => {
             >
               <AvatarImage src={post.profile.avatar_url || undefined} />
               <AvatarFallback>
-                {post.profile.display_name[0].toUpperCase()}
+                {post.profile.display_name?.[0]?.toUpperCase() ?? 'U'}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">

@@ -173,7 +173,7 @@ const Notifications = () => {
                   <Avatar className="h-12 w-12 flex-shrink-0">
                     <AvatarImage src={notification.actor.avatar_url || undefined} />
                     <AvatarFallback>
-                      {notification.actor.display_name[0].toUpperCase()}
+                      {notification.actor.display_name?.[0]?.toUpperCase() ?? 'U'}
                     </AvatarFallback>
                   </Avatar>
 

@@ -210,7 +210,7 @@ export default function Messages() {
               <Avatar className="h-12 w-12 shrink-0">
                 <AvatarImage src={conversation.other_user.avatar_url || ''} />
                 <AvatarFallback>
-                  {conversation.other_user.display_name[0]?.toUpperCase()}
+                  {conversation.other_user.display_name?.[0]?.toUpperCase() ?? '?'}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">

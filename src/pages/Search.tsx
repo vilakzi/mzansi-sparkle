@@ -167,7 +167,7 @@ const Search = () => {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12">
                         <AvatarImage src={user.avatar_url || undefined} />
-                        <AvatarFallback>{user.display_name[0].toUpperCase()}</AvatarFallback>
+                        <AvatarFallback>{user.display_name?.[0]?.toUpperCase() ?? 'U'}</AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="font-semibold">{user.username}</div>

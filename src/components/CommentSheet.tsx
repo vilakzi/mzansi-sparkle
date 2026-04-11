@@ -136,7 +136,7 @@ export const CommentSheet = ({ postId, isOpen, onClose }: CommentSheetProps) => 
           onClick={() => navigate(`/profile/${comment.profile.username}`)}
         >
           <AvatarImage src={comment.profile.avatar_url || undefined} />
-          <AvatarFallback>{comment.profile.display_name[0].toUpperCase()}</AvatarFallback>
+          <AvatarFallback>{comment.profile.display_name?.[0]?.toUpperCase() ?? 'U'}</AvatarFallback>
         </Avatar>
         
         <div className="flex-1 min-w-0">
