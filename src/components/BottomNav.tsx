@@ -1,8 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Search, PlusCircle, Grid3x3, User } from "lucide-react";
+import { Home, Search, PlusCircle, Bell, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -40,19 +39,18 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
       isSpecial: true,
     },
     {
-      path: "/categories",
-      icon: Grid3x3,
-      label: "Categories",
-      onClick: () => navigate("/categories"),
+      path: "/notifications",
+      icon: Bell,
+      label: "Notifications",
+      onClick: () => navigate("/notifications"),
     },
     {
-      path: userProfile ? `/profile/${userProfile.username}` : "/profile",
+      path: userProfile ? `/profile/${userProfile.username}` : "",
       icon: User,
       label: "Profile",
+      disabled: !userProfile,
       onClick: () => {
-        if (userProfile) {
-          navigate(`/profile/${userProfile.username}`);
-        }
+        if (userProfile) navigate(`/profile/${userProfile.username}`);
       },
     },
   ];
@@ -65,15 +63,17 @@ export const BottomNav = ({ onUploadClick, userProfile }: BottomNavProps) => {
       >
         {navItems.map((item) => (
           <Button
-            key={item.path}
+            key={item.label}
             variant="ghost"
             size="icon"
             onClick={item.onClick}
+            disabled={item.disabled}
             className={cn(
               "relative h-12 w-12 rounded-full transition-colors",
               item.isSpecial && "bg-primary text-primary-foreground hover:bg-primary/90",
-              !item.isSpecial && isActive(item.path) && "text-primary",
-              !item.isSpecial && !isActive(item.path) && "text-muted-foreground"
+              !item.isSpecial && item.path && isActive(item.path) && "text-primary",
+              !item.isSpecial && (!item.path || !isActive(item.path)) && "text-muted-foreground",
+              item.disabled && "opacity-40"
             )}
           >
             <item.icon className="h-6 w-6" />

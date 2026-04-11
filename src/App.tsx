@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { toast } from "sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -29,32 +30,19 @@ const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
-    // Initialize PWA utilities
     const initPWA = async () => {
       await logPWAStatus();
       await clearOldCaches();
-      
-      console.log('[App] PWA initialized with hot-reload support');
-      console.log('[App] Videos will be cached adaptively based on network quality');
-      
-      // Check if PWA is installable
-      const isInstalled = window.matchMedia('(display-mode: standalone)').matches;
-      if (isInstalled) {
-        console.log('[App] Running as installed PWA');
-      } else {
-        console.log('[App] Running in browser - install prompt may appear');
-      }
     };
 
     initPWA();
 
-    // Log network changes
     const handleOnline = () => {
-      console.log('[App] Network: ONLINE');
+      toast.success("Back online");
     };
-    
+
     const handleOffline = () => {
-      console.log('[App] Network: OFFLINE - Using cached content');
+      toast.warning("You're offline — using cached content");
     };
 
     window.addEventListener('online', handleOnline);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Heart, MessageCircle, Share2, Bookmark, Volume2, VolumeX, Play, MoreVertical, Flag, Trash2, RefreshCw, Loader2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -43,7 +43,7 @@ interface FeedPostProps {
   };
 }
 
-export const FeedPost = ({
+export const FeedPost = memo(function FeedPost({
   id,
   mediaUrl,
   mediaType,
@@ -769,4 +769,4 @@ export const FeedPost = ({
       <ReportDialog isOpen={showReport} onClose={() => setShowReport(false)} postId={id} />
     </div>
   );
-};
+});

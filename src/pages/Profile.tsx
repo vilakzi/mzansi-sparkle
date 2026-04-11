@@ -96,18 +96,20 @@ const Profile = () => {
 
         if (postsError) throw postsError;
 
-        const postsWithLikes = user?.id ? await Promise.all(
-          (postsData || []).map(async (post) => {
-            const { data: likeData } = await supabase
-              .from("post_likes")
-              .select("id")
-              .eq("post_id", post.id)
-              .eq("user_id", user.id)
-              .maybeSingle();
-            
-            return { ...post, user_liked: !!likeData };
-          })
-        ) : (postsData || []).map(post => ({ ...post, user_liked: false }));
+        const postIds = (postsData || []).map(p => p.id);
+        let likedSet = new Set<string>();
+        if (user?.id && postIds.length > 0) {
+          const { data: likesData } = await supabase
+            .from("post_likes")
+            .select("post_id")
+            .eq("user_id", user.id)
+            .in("post_id", postIds);
+          likedSet = new Set((likesData || []).map((l: any) => l.post_id));
+        }
+        const postsWithLikes = (postsData || []).map(post => ({
+          ...post,
+          user_liked: likedSet.has(post.id),
+        }));
 
         setPosts(postsWithLikes);
       } catch (error: any) {

@@ -165,17 +165,22 @@ const Notifications = () => {
                 key={notification.id}
                 className={cn(
                   "p-4 cursor-pointer hover:bg-accent transition-colors",
-                  !notification.read && "bg-primary/5"
+                  !notification.read && "bg-primary/10 border-primary/20"
                 )}
                 onClick={() => handleNotificationClick(notification)}
               >
-                <div className="flex gap-3">
-                  <Avatar className="h-12 w-12 flex-shrink-0">
-                    <AvatarImage src={notification.actor.avatar_url || undefined} />
-                    <AvatarFallback>
-                      {notification.actor.display_name?.[0]?.toUpperCase() ?? 'U'}
-                    </AvatarFallback>
-                  </Avatar>
+                <div className="flex gap-3 items-start">
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={notification.actor.avatar_url || undefined} />
+                      <AvatarFallback>
+                        {notification.actor.display_name?.[0]?.toUpperCase() ?? 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    {!notification.read && (
+                      <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-primary border-2 border-background" />
+                    )}
+                  </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2">

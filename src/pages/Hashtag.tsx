@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
 import { UploadButton } from "@/components/UploadButton";
 import { ArrowLeft, Hash } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 type HashtagPost = {
@@ -94,8 +95,28 @@ const Hashtag = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="min-h-screen bg-background pb-20">
+        <div className="max-w-2xl mx-auto">
+          <div className="sticky top-0 z-50 bg-background border-b p-4">
+            <div className="flex items-center gap-3 mb-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-4 mb-4">
+              <Skeleton className="h-16 w-16 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+            </div>
+          </div>
+          <div className="p-4 grid grid-cols-3 gap-1">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-square" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

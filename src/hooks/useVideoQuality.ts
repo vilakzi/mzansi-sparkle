@@ -92,16 +92,10 @@ export const useVideoQuality = (): UseVideoQualityReturn => {
     return () => connection.removeEventListener("change", handleChange);
   }, []);
 
-  // Periodically check network status for Auto mode
+  // Initial network status check on mount
   useEffect(() => {
-    if (preference !== "auto") return;
-
-    const interval = setInterval(() => {
-      setNetworkStatus(getNetworkStatus());
-    }, 10000); // Check every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [preference]);
+    setNetworkStatus(getNetworkStatus());
+  }, []);
 
   // Fetch preference from database on mount
   useEffect(() => {
@@ -128,17 +122,8 @@ export const useVideoQuality = (): UseVideoQualityReturn => {
   // Update preference and persist
   const setPreference = useCallback((pref: VideoQualityPreference) => {
     setPreferenceState(pref);
-    
-    // Persist to localStorage immediately
     localStorage.setItem(STORAGE_KEY, pref);
-    
-    // Log the change
-    console.log(`[VideoQuality] Preference set to: ${pref}, effective: ${
-      pref === "auto" 
-        ? (networkStatus === "slow" ? "low" : "high")
-        : pref
-    }`);
-  }, [networkStatus]);
+  }, []);
 
   return {
     preference,

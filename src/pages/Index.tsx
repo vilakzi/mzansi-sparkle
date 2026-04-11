@@ -37,9 +37,7 @@ const Index = () => {
           navigate("/auth");
         } else {
           setUser(session.user);
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+          fetchProfile(session.user.id);
         }
       }
     );
