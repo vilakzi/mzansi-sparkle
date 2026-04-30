@@ -4,9 +4,8 @@ import { FeedPost } from "./FeedPost";
 import { PostErrorBoundary } from "./PostErrorBoundary";
 import { toast } from "sonner";
 import { FeedLoadingSkeleton } from "./LoadingSkeleton";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ArrowUp } from "lucide-react";
 import { Button } from "./ui/button";
-// Video preloading consolidated into useVideoPreloader hook
 import { useVideoPreloader } from "@/hooks/useVideoPreloader";
 
 interface Post {
@@ -36,6 +35,7 @@ export const VerticalFeed = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [newPostsAvailable, setNewPostsAvailable] = useState(false);
   const [windowStart, setWindowStart] = useState(0);
   const [pullDistance, setPullDistance] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -253,6 +253,7 @@ export const VerticalFeed = () => {
   const handleRefresh = async () => {
     if (!userId) return;
     setIsRefreshing(true);
+    setNewPostsAvailable(false);
     try {
       await fetchPosts(undefined, true);
       toast.success("Feed refreshed");
@@ -338,8 +339,20 @@ export const VerticalFeed = () => {
 
   const setupRealtimeSubscription = () => {
     const channel = supabase
-      .channel("posts-changes")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, async () => {})
+      .channel("feed-new-posts")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "posts" },
+        (payload) => {
+          // Only show the banner if the user is not already at the top of the feed
+          if (currentIndexRef.current > 0) {
+            setNewPostsAvailable(true);
+          } else {
+            // Already at top — silently prepend so feed refreshes on next scroll
+            setNewPostsAvailable(true);
+          }
+        }
+      )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -485,6 +498,24 @@ export const VerticalFeed = () => {
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col bg-black">
+      {/* New posts available banner */}
+      {newPostsAvailable && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+          <Button
+            size="sm"
+            className="shadow-lg rounded-full gap-2 bg-primary text-primary-foreground animate-bounce-subtle"
+            onClick={async () => {
+              setNewPostsAvailable(false);
+              scrollToTop();
+              await handleRefresh();
+            }}
+          >
+            <ArrowUp className="h-4 w-4" />
+            New posts
+          </Button>
+        </div>
+      )}
+
       {/* Pull-to-refresh indicator */}
       {pullDistance > 0 && (
         <div 

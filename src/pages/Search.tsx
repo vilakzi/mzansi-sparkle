@@ -6,10 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BottomNav } from "@/components/BottomNav";
 import { UploadButton } from "@/components/UploadButton";
-import { Search as SearchIcon, TrendingUp, Hash, ArrowLeft } from "lucide-react";
+import { Search as SearchIcon, Hash, ArrowLeft, Users, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { useDebounce } from "@/hooks/useDebounce";
 
 type Profile = {
   id: string;
@@ -34,6 +36,28 @@ type Post = {
   comments_count: number;
 };
 
+const SearchResultsSkeleton = () => (
+  <div className="space-y-3 mt-4">
+    {[1, 2, 3, 4].map((i) => (
+      <div key={i} className="flex items-center gap-3 p-4">
+        <Skeleton className="h-12 w-12 rounded-full flex-shrink-0" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-48" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const PostGridSkeleton = () => (
+  <div className="grid grid-cols-3 gap-1 mt-4">
+    {[1, 2, 3, 4, 5, 6].map((i) => (
+      <Skeleton key={i} className="aspect-square" />
+    ))}
+  </div>
+);
+
 const Search = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -44,28 +68,34 @@ const Search = () => {
   const [showUpload, setShowUpload] = useState(false);
   const [userProfile, setUserProfile] = useState<{ username: string } | undefined>();
 
+  // Debounce prevents firing a query on every single keystroke
+  const debouncedQuery = useDebounce(query, 350);
+
   useEffect(() => {
     fetchUserProfile();
   }, []);
+
+  // Only runs after typing stops for 350ms
+  useEffect(() => {
+    runSearch(debouncedQuery);
+  }, [debouncedQuery]);
 
   const fetchUserProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data } = await supabase
         .from("profiles")
         .select("username")
         .eq("id", user.id)
         .single();
-
       if (data) setUserProfile(data);
     } catch (error) {
       console.error("Error fetching profile:", error);
     }
   };
 
-  const handleSearch = async (searchQuery: string) => {
+  const runSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) {
       setUsers([]);
       setHashtags([]);
@@ -76,39 +106,37 @@ const Search = () => {
     setLoading(true);
     try {
       const searchTerm = searchQuery.trim().toLowerCase();
-
-      // Search users
-      const { data: usersData, error: usersError } = await supabase
-        .from("profiles")
-        .select("id, username, display_name, avatar_url, followers_count")
-        .or(`username.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`)
-        .limit(20);
-
-      if (usersError) throw usersError;
-      setUsers(usersData || []);
-
-      // Search hashtags
       const hashtagQuery = searchTerm.startsWith("#") ? searchTerm.substring(1) : searchTerm;
-      const { data: hashtagsData, error: hashtagsError } = await supabase
-        .from("hashtags")
-        .select("id, name, posts_count")
-        .ilike("name", `%${hashtagQuery}%`)
-        .order("posts_count", { ascending: false })
-        .limit(20);
 
-      if (hashtagsError) throw hashtagsError;
-      setHashtags(hashtagsData || []);
+      // Fan out all three queries in parallel
+      const [usersResult, hashtagsResult, postsResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, username, display_name, avatar_url, followers_count")
+          .or(`username.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`)
+          .order("followers_count", { ascending: false })
+          .limit(20),
+        supabase
+          .from("hashtags")
+          .select("id, name, posts_count")
+          .ilike("name", `%${hashtagQuery}%`)
+          .order("posts_count", { ascending: false })
+          .limit(20),
+        supabase
+          .from("posts")
+          .select("id, media_url, media_type, caption, likes_count, comments_count")
+          .ilike("caption", `%${searchTerm}%`)
+          .order("likes_count", { ascending: false })
+          .limit(30),
+      ]);
 
-      // Search posts by caption
-      const { data: postsData, error: postsError } = await supabase
-        .from("posts")
-        .select("id, media_url, media_type, caption, likes_count, comments_count")
-        .ilike("caption", `%${searchTerm}%`)
-        .order("created_at", { ascending: false })
-        .limit(20);
+      if (usersResult.error) throw usersResult.error;
+      if (hashtagsResult.error) throw hashtagsResult.error;
+      if (postsResult.error) throw postsResult.error;
 
-      if (postsError) throw postsError;
-      setPosts(postsData || []);
+      setUsers(usersResult.data || []);
+      setHashtags(hashtagsResult.data || []);
+      setPosts(postsResult.data || []);
     } catch (error: any) {
       console.error("Search error:", error);
       toast.error("Search failed");
@@ -117,10 +145,7 @@ const Search = () => {
     }
   };
 
-  const handleQueryChange = (value: string) => {
-    setQuery(value);
-    handleSearch(value);
-  };
+  const hasResults = users.length > 0 || hashtags.length > 0 || posts.length > 0;
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -132,14 +157,17 @@ const Search = () => {
             </Button>
             <h1 className="text-xl font-semibold">Search</h1>
           </div>
-          
+
           <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search users, hashtags, or posts..."
               value={query}
-              onChange={(e) => handleQueryChange(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               className="pl-10"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </div>
         </div>
@@ -147,103 +175,137 @@ const Search = () => {
         {query ? (
           <Tabs defaultValue="users" className="p-4">
             <TabsList className="w-full grid grid-cols-3">
-              <TabsTrigger value="users">Users</TabsTrigger>
-              <TabsTrigger value="hashtags">Hashtags</TabsTrigger>
-              <TabsTrigger value="posts">Posts</TabsTrigger>
+              <TabsTrigger value="users" className="flex items-center gap-1">
+                <Users className="h-3.5 w-3.5" />
+                Users {!loading && users.length > 0 && <span className="ml-1 text-xs opacity-70">({users.length})</span>}
+              </TabsTrigger>
+              <TabsTrigger value="hashtags" className="flex items-center gap-1">
+                <Hash className="h-3.5 w-3.5" />
+                Tags {!loading && hashtags.length > 0 && <span className="ml-1 text-xs opacity-70">({hashtags.length})</span>}
+              </TabsTrigger>
+              <TabsTrigger value="posts" className="flex items-center gap-1">
+                <FileText className="h-3.5 w-3.5" />
+                Posts {!loading && posts.length > 0 && <span className="ml-1 text-xs opacity-70">({posts.length})</span>}
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="users" className="space-y-3 mt-4">
+            <TabsContent value="users" className="mt-2">
               {loading ? (
-                <p className="text-center text-muted-foreground py-8">Searching...</p>
+                <SearchResultsSkeleton />
               ) : users.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No users found</p>
+                <div className="text-center text-muted-foreground py-12">
+                  <Users className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                  <p>No users found for "{query}"</p>
+                </div>
               ) : (
-                users.map((user) => (
-                  <Card
-                    key={user.id}
-                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => navigate(`/profile/${user.username}`)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={user.avatar_url || undefined} />
-                        <AvatarFallback>{user.display_name?.[0]?.toUpperCase() ?? 'U'}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-semibold">{user.username}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {user.display_name} · {user.followers_count} followers
+                <div className="space-y-2 mt-4">
+                  {users.map((user) => (
+                    <Card
+                      key={user.id}
+                      className="p-4 cursor-pointer hover:bg-accent transition-colors active:scale-[0.99]"
+                      onClick={() => navigate(`/profile/${user.username}`)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src={user.avatar_url || undefined} />
+                          <AvatarFallback>{user.display_name?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate">@{user.username}</div>
+                          <div className="text-sm text-muted-foreground truncate">
+                            {user.display_name} · {user.followers_count.toLocaleString()} followers
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Card>
-                ))
+                    </Card>
+                  ))}
+                </div>
               )}
             </TabsContent>
 
-            <TabsContent value="hashtags" className="space-y-3 mt-4">
+            <TabsContent value="hashtags" className="mt-2">
               {loading ? (
-                <p className="text-center text-muted-foreground py-8">Searching...</p>
+                <SearchResultsSkeleton />
               ) : hashtags.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No hashtags found</p>
+                <div className="text-center text-muted-foreground py-12">
+                  <Hash className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                  <p>No hashtags found for "{query}"</p>
+                </div>
               ) : (
-                hashtags.map((hashtag) => (
-                  <Card
-                    key={hashtag.id}
-                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => navigate(`/hashtag/${hashtag.name}`)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Hash className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <div className="font-semibold">#{hashtag.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {hashtag.posts_count} posts
+                <div className="space-y-2 mt-4">
+                  {hashtags.map((hashtag) => (
+                    <Card
+                      key={hashtag.id}
+                      className="p-4 cursor-pointer hover:bg-accent transition-colors active:scale-[0.99]"
+                      onClick={() => navigate(`/hashtag/${hashtag.name}`)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <Hash className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <div className="font-semibold">#{hashtag.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {hashtag.posts_count.toLocaleString()} posts
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Card>
-                ))
+                    </Card>
+                  ))}
+                </div>
               )}
             </TabsContent>
 
-            <TabsContent value="posts" className="mt-4">
+            <TabsContent value="posts" className="mt-2">
               {loading ? (
-                <p className="text-center text-muted-foreground py-8">Searching...</p>
+                <PostGridSkeleton />
               ) : posts.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No posts found</p>
+                <div className="text-center text-muted-foreground py-12">
+                  <FileText className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                  <p>No posts found for "{query}"</p>
+                </div>
               ) : (
-                <div className="grid grid-cols-3 gap-1">
+                <div className="grid grid-cols-3 gap-1 mt-4">
                   {posts.map((post) => (
-                    <Card key={post.id} className="aspect-square overflow-hidden">
+                    <div
+                      key={post.id}
+                      className="aspect-square overflow-hidden rounded cursor-pointer relative group"
+                      onClick={() => navigate(`/post/${post.id}`)}
+                    >
                       {post.media_type.startsWith("image") ? (
                         <img
                           src={post.media_url}
                           alt={post.caption || "Post"}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          loading="lazy"
                         />
                       ) : (
                         <video
                           src={post.media_url}
                           className="w-full h-full object-cover"
+                          preload="none"
+                          muted
                         />
                       )}
-                    </Card>
+                      {/* overlay with like count on hover */}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="text-white text-sm font-semibold">♥ {post.likes_count.toLocaleString()}</span>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
             </TabsContent>
           </Tabs>
         ) : (
-          <div className="p-4 text-center text-muted-foreground">
+          <div className="p-4 text-center text-muted-foreground py-16">
             <SearchIcon className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p>Search for users, hashtags, or content</p>
+            <p className="text-base font-medium mb-1">Find creators & content</p>
+            <p className="text-sm">Search for users, #hashtags, or captions</p>
           </div>
         )}
       </div>
-      
+
       {showUpload && <UploadButton onClose={() => setShowUpload(false)} />}
       <BottomNav onUploadClick={() => setShowUpload(true)} userProfile={userProfile} />
     </div>
