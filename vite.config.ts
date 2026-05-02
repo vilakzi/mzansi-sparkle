@@ -13,11 +13,10 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
-    // Enable PWA in both dev and production for hot-reload and testing
     VitePWA({
       registerType: "autoUpdate",
       devOptions: {
-        enabled: true, // Enable PWA in dev for hot-reload testing
+        enabled: true,
         type: "module",
       },
       includeAssets: ["favicon.ico", "robots.txt"],
@@ -48,31 +47,23 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,jpg,jpeg}"],
-        // Increase cache size limits for videos
-        maximumFileSizeToCacheInBytes: 100 * 1024 * 1024, // 100MB per file
+        maximumFileSizeToCacheInBytes: 100 * 1024 * 1024,
         runtimeCaching: [
           {
-            // Aggressive video caching - Cache First strategy for instant playback
             urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/posts-media\/.*\.(mp4|webm|mov)$/i,
             handler: "CacheFirst",
             options: {
               cacheName: "video-cache-v1",
               expiration: {
-                maxEntries: 100, // Cache up to 100 videos
-                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+                maxEntries: 100,
+                maxAgeSeconds: 30 * 24 * 60 * 60
               },
-              cacheableResponse: {
-                statuses: [0, 200]
-              },
-              // Range request support for video streaming
+              cacheableResponse: { statuses: [0, 200] },
               rangeRequests: true,
               plugins: [
                 {
                   cacheWillUpdate: async ({ response }) => {
-                    // Only cache successful responses
-                    if (response.status === 200 || response.status === 206) {
-                      return response;
-                    }
+                    if (response.status === 200 || response.status === 206) return response;
                     return null;
                   },
                 }
@@ -80,45 +71,38 @@ export default defineConfig(({ mode }) => ({
             }
           },
           {
-            // Image caching
             urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*\.(jpg|jpeg|png|gif|webp)$/i,
             handler: "CacheFirst",
             options: {
               cacheName: "image-cache-v1",
               expiration: {
                 maxEntries: 200,
-                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+                maxAgeSeconds: 30 * 24 * 60 * 60
               },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
+              cacheableResponse: { statuses: [0, 200] }
             }
           },
           {
-            // API calls - Network First with fallback to cache
             urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache-v1",
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 5 * 60 // 5 minutes
+                maxAgeSeconds: 5 * 60
               },
-              networkTimeoutSeconds: 10, // Fallback to cache after 10s
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
+              networkTimeoutSeconds: 10,
+              cacheableResponse: { statuses: [0, 200] }
             }
           },
           {
-            // Fonts and static assets
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: "CacheFirst",
             options: {
               cacheName: "google-fonts-cache-v1",
               expiration: {
                 maxEntries: 20,
-                maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
+                maxAgeSeconds: 365 * 24 * 60 * 60
               }
             }
           }
@@ -130,5 +114,37 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React runtime — tiny, always needed
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          // Data layer — React Query + Supabase
+          "vendor-data": ["@tanstack/react-query", "@supabase/supabase-js"],
+          // Heavy chart library — only loaded on /analytics
+          "vendor-charts": ["recharts"],
+          // Date utilities
+          "vendor-date": ["date-fns"],
+          // Radix UI primitives (shadcn foundation)
+          "vendor-radix": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-avatar",
+            "@radix-ui/react-sheet",
+            "@radix-ui/react-scroll-area",
+            "@radix-ui/react-toast",
+            "@radix-ui/react-tooltip",
+            "@radix-ui/react-select",
+            "@radix-ui/react-switch",
+            "@radix-ui/react-slider",
+          ],
+        },
+      },
+    },
+    // Warn if any single chunk exceeds 500KB
+    chunkSizeWarningLimit: 500,
   },
 }));
