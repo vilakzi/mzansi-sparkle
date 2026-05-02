@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, LogOut, Trash2, Loader2, Play, Wifi, Signal, Zap } from "lucide-react";
+import { ArrowLeft, User, LogOut, Trash2, Loader2, Play, Wifi, Signal, Zap, Bell } from "lucide-react";
+import { PushNotificationToggle } from "@/components/PushNotificationPrompt";
 import { toast } from "sonner";
 import { clearAllCaches, getCacheStatus } from "@/lib/clearCache";
 import { useVideoQualityContext } from "@/contexts/VideoQualityContext";
@@ -340,6 +341,22 @@ const Settings = () => {
                     onCheckedChange={(checked) => updateSettings({ show_following: checked })}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Notifications */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Notifications
+                </CardTitle>
+                <CardDescription>
+                  Control how you receive notifications
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PushNotificationToggle />
               </CardContent>
             </Card>
 
