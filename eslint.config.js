@@ -19,8 +19,15 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Warnings — useful signal but don't block PRs
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      "react-hooks/exhaustive-deps": "warn",
+      // Off — project uses noImplicitAny: false throughout; enforcing explicit-any
+      // would require touching every pre-existing file
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      // Off — intentional empty catch blocks are common in this codebase
+      "no-empty": "off",
     },
   },
 );

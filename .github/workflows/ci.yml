@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  # Cancel in-progress runs for the same PR; let main always complete
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  ci:
+    name: Typecheck · Lint · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── TypeScript ──────────────────────────────────────────────────────────
+      - name: Typecheck
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      # ── ESLint ───────────────────────────────────────────────────────────────
+      - name: Lint
+        run: npm run lint
+
+      # ── Production build ─────────────────────────────────────────────────────
+      # Env vars are required by vite at build time.
+      # Store VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, and
+      # VITE_SUPABASE_PROJECT_ID as GitHub Actions repository secrets.
+      # VITE_VAPID_PUBLIC_KEY is optional (push notifications degrade gracefully).
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
+
+      # ── Bundle size report ────────────────────────────────────────────────────
+      - name: Report bundle sizes
+        run: |
+          echo "### Bundle sizes" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          find dist/assets -name "*.js" -not -name "*.map" \
+            | xargs ls -lh \
+            | awk '{print $5, $9}' \
+            | sort -rh \
+            | head -20 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        if: always()
