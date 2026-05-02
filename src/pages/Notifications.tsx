@@ -10,6 +10,7 @@ import { Heart, MessageCircle, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { PushNotificationPrompt } from "@/components/PushNotificationPrompt";
 
 type Notification = {
   id: string;
@@ -150,6 +151,8 @@ const Notifications = () => {
         <div className="sticky top-0 z-40 bg-background border-b p-4">
           <h1 className="text-xl font-semibold">Notifications</h1>
         </div>
+
+        <PushNotificationPrompt />
 
         <div className="p-4 space-y-2">
           {notifications.length === 0 ? (

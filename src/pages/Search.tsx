@@ -12,6 +12,7 @@ import { UploadButton } from "@/components/UploadButton";
 import { Search as SearchIcon, Hash, ArrowLeft, Users, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
+import { ResponsiveImage } from "@/components/ResponsiveImage";
 
 type Profile = {
   id: string;
@@ -273,11 +274,12 @@ const Search = () => {
                       onClick={() => navigate(`/post/${post.id}`)}
                     >
                       {post.media_type.startsWith("image") ? (
-                        <img
+                        <ResponsiveImage
                           src={post.media_url}
                           alt={post.caption || "Post"}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
+                          className="w-full h-full transition-transform group-hover:scale-105"
+                          sizes="(max-width: 640px) 33vw, 200px"
+                          quality={75}
                         />
                       ) : (
                         <video
