@@ -5,12 +5,13 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical, Edit, Trash2, MessageCircle, Grid3X3, Play } from "lucide-react";
+import { ArrowLeft, UserPlus, UserMinus, Settings, ShieldAlert, MoreVertical, Edit, Trash2, MessageCircle, Grid3X3, Play, VolumeX, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { ReportDialog } from "@/components/ReportDialog";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { ProfileLoadingSkeleton } from "@/components/LoadingSkeleton";
+import { ResponsiveImage } from "@/components/ResponsiveImage";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +60,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
 
@@ -78,14 +80,15 @@ const Profile = () => {
         setProfile(profileData);
 
         if (user?.id && profileData.id !== user.id) {
-          const { data: followData } = await supabase
-            .from("follows")
-            .select("id")
-            .eq("follower_id", user.id)
-            .eq("following_id", profileData.id)
-            .maybeSingle();
-
-          setIsFollowing(!!followData);
+          // Check follow, block, and mute status in parallel
+          const [followResult, blockResult, muteResult] = await Promise.all([
+            supabase.from("follows").select("id").eq("follower_id", user.id).eq("following_id", profileData.id).maybeSingle(),
+            supabase.from("blocked_users").select("id").eq("blocker_id", user.id).eq("blocked_id", profileData.id).maybeSingle(),
+            supabase.from("muted_users").select("id").eq("muter_id", user.id).eq("muted_id", profileData.id).maybeSingle(),
+          ]);
+          setIsFollowing(!!followResult.data);
+          setIsBlocked(!!blockResult.data);
+          setIsMuted(!!muteResult.data);
         }
 
         const { data: postsData, error: postsError } = await supabase
@@ -265,21 +268,34 @@ const Profile = () => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setShowReport(true)}>
+                    <ShieldAlert className="h-4 w-4 mr-2" />
                     Report User
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={async () => {
                     if (!currentUserId) return;
-                    const { error } = await supabase.from("blocked_users").insert({
-                      blocker_id: currentUserId,
-                      blocked_id: profile.id,
-                    });
-                    if (!error) {
-                      setIsBlocked(true);
-                      toast.success("User blocked");
+                    if (isBlocked) {
+                      const { error } = await supabase.from("blocked_users").delete().eq("blocker_id", currentUserId).eq("blocked_id", profile.id);
+                      if (!error) { setIsBlocked(false); toast.success("User unblocked"); }
+                    } else {
+                      const { error } = await supabase.from("blocked_users").insert({ blocker_id: currentUserId, blocked_id: profile.id });
+                      if (!error) { setIsBlocked(true); toast.success("User blocked"); }
                     }
                   }}>
-                    <ShieldAlert className="h-4 w-4 mr-2" />
-                    Block User
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                    {isBlocked ? "Unblock User" : "Block User"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={async () => {
+                    if (!currentUserId) return;
+                    if (isMuted) {
+                      const { error } = await supabase.from("muted_users").delete().eq("muter_id", currentUserId).eq("muted_id", profile.id);
+                      if (!error) { setIsMuted(false); toast.success("User unmuted"); }
+                    } else {
+                      const { error } = await supabase.from("muted_users").insert({ muter_id: currentUserId, muted_id: profile.id });
+                      if (!error) { setIsMuted(true); toast.success("User muted — their posts won't appear in your feed"); }
+                    }
+                  }}>
+                    <VolumeX className="h-4 w-4 mr-2" />
+                    {isMuted ? "Unmute User" : "Mute User"}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -400,6 +416,15 @@ const Profile = () => {
           )}
         </div>
 
+        {/* Blocked user content wall */}
+        {isBlocked && (
+          <div className="mx-4 mb-4 p-6 rounded-xl border border-destructive/20 bg-destructive/5 text-center">
+            <ShieldCheck className="h-10 w-10 mx-auto mb-2 text-destructive/60" />
+            <p className="font-semibold text-sm">You've blocked this user</p>
+            <p className="text-xs text-muted-foreground mt-1">Their content is hidden from your feed.</p>
+          </div>
+        )}
+
         {/* Posts Grid */}
         <Tabs defaultValue="posts" className="w-full">
           <TabsList className="w-full rounded-none border-b border-border bg-transparent h-12">
@@ -425,11 +450,12 @@ const Profile = () => {
                     onClick={() => navigate(`/post/${post.id}`)}
                   >
                     {post.media_type.startsWith("image") ? (
-                      <img 
-                        src={post.media_url} 
-                        alt={post.caption || "Post"} 
-                        className="w-full h-full object-cover"
-                        loading="lazy"
+                      <ResponsiveImage
+                        src={post.media_url}
+                        alt={post.caption || "Post"}
+                        className="w-full h-full"
+                        sizes="(max-width: 640px) 33vw, 200px"
+                        quality={75}
                       />
                     ) : (
                       <div className="relative w-full h-full">
