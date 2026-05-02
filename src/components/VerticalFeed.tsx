@@ -187,7 +187,17 @@ export const VerticalFeed = () => {
       const BATCH_SIZE = 20;
       const offset = cursor ? posts.length : 0;
 
-      const { data: fetchedPosts, error } = await supabase
+      // Fetch blocked and muted user IDs to exclude from feed
+      const [blockedResult, mutedResult] = await Promise.all([
+        supabase.from("blocked_users").select("blocked_id").eq("blocker_id", session.user.id),
+        supabase.from("muted_users").select("muted_id").eq("muter_id", session.user.id),
+      ]);
+      const excludedIds = [
+        ...(blockedResult.data?.map((r) => r.blocked_id) ?? []),
+        ...(mutedResult.data?.map((r) => r.muted_id) ?? []),
+      ];
+
+      let query = supabase
         .from('posts')
         .select(`
           id, media_url, media_type, caption, likes_count, comments_count,
@@ -196,6 +206,13 @@ export const VerticalFeed = () => {
         `)
         .order('created_at', { ascending: false })
         .range(offset, offset + BATCH_SIZE - 1);
+
+      // Exclude posts from blocked/muted users
+      if (excludedIds.length > 0) {
+        query = query.not('user_id', 'in', `(${excludedIds.join(',')})`);
+      }
+
+      const { data: fetchedPosts, error } = await query;
 
       if (error) throw error;
 
